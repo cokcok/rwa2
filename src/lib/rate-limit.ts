@@ -21,7 +21,7 @@ setInterval(() => {
 }, 60000)
 
 // ดึง IP address จาก request
-function getClientIp(request: NextRequest): string {
+export function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for')
   if (forwarded) {
     return forwarded.split(',')[0].trim()

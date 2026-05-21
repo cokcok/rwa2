@@ -4,9 +4,9 @@ import { executeQuery, executeNonQuery } from '@/lib/oracle'
 import { verifyToken } from '@/lib/jwt'
 import { validateCheckinRequest } from '@/lib/validation'
 import { calculateDistance, isWithinRange } from '@/lib/geolocation'
-import { rateLimitMiddleware } from '@/lib/rate-limit'
+import { rateLimitMiddleware, getClientIp } from '@/lib/rate-limit'
 import { mockOffices, mockAttendanceLogs } from '@/lib/mock-data'
-import type { GisOffice, LatestAttendance } from '@/types'
+import type { GisOffice } from '@/types'
 
 // POST /api/attendance/checkin
 // ลงเวลาเข้า/ออกงาน
@@ -79,55 +79,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // ตรวจสอบ double check-in (Business Rule)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const latestLogs = mockAttendanceLogs
-        .filter(log => log.emp_id === payload.emp_id && log.action_time >= today)
-        .sort((a, b) => b.action_time.getTime() - a.action_time.getTime())
-
-      if (latestLogs.length > 0) {
-        const latestLog = latestLogs[0]
-
-        // กรณีกด IN ซ้ำในวันเดียวกัน (ยังไม่ OUT)
-        if (action_type === 'IN' && latestLog.action_type === 'IN') {
-          const timeStr = latestLog.action_time.toLocaleTimeString('th-TH', {
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-          return NextResponse.json(
-            {
-              error: 'ALREADY_CHECKED_IN',
-              message: `คุณได้ลงเวลาเข้างานแล้วเมื่อ ${timeStr} น.`
-            },
-            { status: 400 }
-          )
-        }
-
-        // กรณีกด OUT โดยยังไม่มี IN วันนี้
-        if (action_type === 'OUT' && latestLog.action_type === 'OUT') {
-          return NextResponse.json(
-            {
-              error: 'NO_CHECKIN_FOUND',
-              message: 'ไม่พบรายการเข้างานของวันนี้'
-            },
-            { status: 400 }
-          )
-        }
-      } else {
-        // ไม่มี log วันนี้เลย แต่กด OUT
-        if (action_type === 'OUT') {
-          return NextResponse.json(
-            {
-              error: 'NO_CHECKIN_FOUND',
-              message: 'ไม่พบรายการเข้างานของวันนี้'
-            },
-            { status: 400 }
-          )
-        }
-      }
-
       // บันทึก mock log
       const newLog = {
         emp_id: payload.emp_id,
@@ -147,9 +98,9 @@ export async function POST(request: NextRequest) {
     // Real Oracle DB mode
     // ดึงข้อมูลพิกัดสำนักงานจาก GIS
     const officeSql = `
-      SELECT ORG_CODE, ORG_NAME, LON_WGS84, LAT_WGS84
+      SELECT DEPT_CODE as ORG_CODE, NAME_TH as ORG_NAME, LON_WGS84, LAT_WGS84
       FROM hrs.v_gis_raot_office
-      WHERE ORG_CODE = :org_code
+      WHERE DEPT_CODE = :org_code
     `
 
     const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
@@ -181,64 +132,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ตรวจสอบ double check-in (Business Rule)
-    const checkinSql = `
-      SELECT ACTION_TYPE, ACTION_TIME
-      FROM ATTENDANCE_LOG
-      WHERE EMP_ID = :emp_id
-        AND TRUNC(CAST(ACTION_TIME AS DATE)) = TRUNC(SYSDATE)
-      ORDER BY ACTION_TIME DESC
-      FETCH FIRST 1 ROW ONLY
-    `
-
-    const latestLogs = await executeQuery<LatestAttendance>(checkinSql, {
-      emp_id: payload.emp_id
-    })
-
-    if (latestLogs.length > 0) {
-      const latestLog = latestLogs[0]
-
-      // กรณีกด IN ซ้ำในวันเดียวกัน (ยังไม่ OUT)
-      if (action_type === 'IN' && latestLog.ACTION_TYPE === 'IN') {
-        const timeStr = new Date(latestLog.ACTION_TIME).toLocaleTimeString('th-TH', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-        return NextResponse.json(
-          {
-            error: 'ALREADY_CHECKED_IN',
-            message: `คุณได้ลงเวลาเข้างานแล้วเมื่อ ${timeStr} น.`
-          },
-          { status: 400 }
-        )
-      }
-
-      // กรณีกด OUT โดยยังไม่มี IN วันนี้
-      if (action_type === 'OUT' && latestLog.ACTION_TYPE === 'OUT') {
-        return NextResponse.json(
-          {
-            error: 'NO_CHECKIN_FOUND',
-            message: 'ไม่พบรายการเข้างานของวันนี้'
-          },
-          { status: 400 }
-        )
-      }
-    } else {
-      // ไม่มี log วันนี้เลย แต่กด OUT
-      if (action_type === 'OUT') {
-        return NextResponse.json(
-          {
-            error: 'NO_CHECKIN_FOUND',
-            message: 'ไม่พบรายการเข้างานของวันนี้'
-          },
-          { status: 400 }
-        )
-      }
-    }
-
     // ดึงข้อมูล User-Agent สำหรับ audit trail
     const userAgent = request.headers.get('user-agent') || ''
     const deviceInfo = userAgent.substring(0, 500) // จำกัดความยาว
+
+    // ดึง IP address ของเครื่องผู้ใช้
+    const clientIp = getClientIp(request)
 
     // บันทึก ATTENDANCE_LOG
     const insertSql = `
@@ -247,13 +146,13 @@ export async function POST(request: NextRequest) {
         HOME_ORG_CODE, CHECKIN_ORG_CODE, CHECKIN_ORG_NAME,
         ACTION_TYPE, ACTION_TIME,
         USER_LAT, USER_LNG, OFFICE_LAT, OFFICE_LNG,
-        DISTANCE_METER, IS_WITHIN_RANGE, DEVICE_INFO
+        DISTANCE_METER, IS_WITHIN_RANGE, DEVICE_INFO, CLIENT_IP
       ) VALUES (
         :emp_id, :national_id, :full_name, :checkin_type,
         :home_org_code, :checkin_org_code, :checkin_org_name,
         :action_type, SYSTIMESTAMP AT TIME ZONE 'Asia/Bangkok',
         :user_lat, :user_lng, :office_lat, :office_lng,
-        :distance_meter, :is_within_range, :device_info
+        :distance_meter, :is_within_range, :device_info, :client_ip
       )
       RETURNING LOG_ID, ACTION_TIME INTO :log_id, :action_time
     `
@@ -274,6 +173,7 @@ export async function POST(request: NextRequest) {
       distance_meter: distance,
       is_within_range: 'Y',
       device_info: deviceInfo,
+      client_ip: clientIp,
       log_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
       action_time: { dir: oracledb.BIND_OUT, type: oracledb.DATE }
     })

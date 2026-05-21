@@ -45,9 +45,8 @@ export async function GET(request: NextRequest) {
 
     // ดึงข้อมูลสังกัดจาก GIS view
     const sql = `
-      SELECT ORG_CODE, ORG_NAME, LON_WGS84, LAT_WGS84
-      FROM hrs.v_gis_raot_office
-      ORDER BY ORG_CODE
+      select  DEPT_PAID_CODE as ORG_CODE, DEPT_PAID_NAME as ORG_NAME,LON_WGS84,LAT_WGS84  from  V_PN_EMP_OTH , v_geo_raot_office WHERE DEPT_PAID_CODE = DEPT_CODE 
+        and    emp_status != 4 group by DEPT_PAID_CODE, DEPT_PAID_NAME,LON_WGS84,LAT_WGS84 order by DEPT_PAID_CODE
     `
 
     const offices = await executeQuery<GisOffice>(sql)

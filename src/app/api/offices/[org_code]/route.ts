@@ -64,11 +64,7 @@ export async function GET(
     }
 
     // ดึงข้อมูลพิกัดสำนักงานจาก GIS view
-    const sql = `
-      SELECT ORG_CODE, ORG_NAME, LON_WGS84, LAT_WGS84
-      FROM hrs.v_gis_raot_office
-      WHERE ORG_CODE = :org_code
-    `
+    const sql = 'SELECT DEPT_CODE as ORG_CODE,LON_WGS84,LAT_WGS84,NAME_TH as ORG_NAME FROM hrs.v_gis_raot_office WHERE DEPT_CODE = :org_code '
 
     const offices = await executeQuery<GisOffice>(sql, { org_code })
 

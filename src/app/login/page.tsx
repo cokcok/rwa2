@@ -6,7 +6,7 @@ import ThaiIdInput from '@/components/ThaiIdInput'
 import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function LoginPage() {
-  const [nationalId, setNationalId] = useState('')
+  const [nationalId, setNationalId] = useState('1100800354530')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<{

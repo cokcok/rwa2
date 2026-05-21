@@ -41,6 +41,7 @@ export interface AttendanceRecord {
   distance_meter: number
   is_within_range: 'Y' | 'N'
   device_info: string
+  client_ip: string
   created_at: string
 }
 
