@@ -20,18 +20,23 @@ export async function GET() {
   // ลอง initialize Oracle Client อีกครั้ง
   if (!isThickMode) {
     try {
-      oracledb.initOracleClient({ libDir: oracleClientPath || 'C:\\oracle_instant\\instantclient_19_30' })
-      console.log('Oracle Client initialized in test-db')
+      if (!oracleClientPath) {
+        console.warn('ORACLE_CLIENT_PATH is not set, skipping Oracle Client initialization')
+      } else {
+        oracledb.initOracleClient({ libDir: oracleClientPath })
+        console.log('Oracle Client initialized in test-db')
+      }
     } catch (error) {
       console.error('Failed to initialize Oracle Client:', error)
     }
   }
-
+ 
   try {
     // ทดสอบ query ง่ายๆ
     const { executeQuery } = await import('@/lib/oracle')
     const result = await executeQuery<{ DUAL_VALUE: string }>(
       'SELECT 1 AS DUAL_VALUE FROM DUAL'
+      //'SELECT ORG_CODE as DUAL_VALUE  FROM hrs.v_gis_raot_office'
     )
 
     return NextResponse.json({
