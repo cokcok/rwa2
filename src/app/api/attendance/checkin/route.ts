@@ -1,0 +1,296 @@
+import { NextRequest, NextResponse } from 'next/server'
+import oracledb from '@/lib/oracle-init'
+import { executeQuery, executeNonQuery } from '@/lib/oracle'
+import { verifyToken } from '@/lib/jwt'
+import { validateCheckinRequest } from '@/lib/validation'
+import { calculateDistance, isWithinRange } from '@/lib/geolocation'
+import { rateLimitMiddleware } from '@/lib/rate-limit'
+import { mockOffices, mockAttendanceLogs } from '@/lib/mock-data'
+import type { GisOffice, LatestAttendance } from '@/types'
+
+// POST /api/attendance/checkin
+// ลงเวลาเข้า/ออกงาน
+export async function POST(request: NextRequest) {
+  // ตรวจสอบ rate limit
+  const rateLimitResult = rateLimitMiddleware(request)
+  if (rateLimitResult) {
+    return rateLimitResult
+  }
+
+  try {
+    // ตรวจสอบ authentication
+    const sessionCookie = request.cookies.get('session')
+    if (!sessionCookie) {
+      return NextResponse.json(
+        { error: 'UNAUTHORIZED', message: 'กรุณาเข้าสู่ระบบ' },
+        { status: 401 }
+      )
+    }
+
+    const payload = verifyToken(sessionCookie.value)
+    if (!payload) {
+      return NextResponse.json(
+        { error: 'INVALID_TOKEN', message: 'Session หมดอายุหรือไม่ถูกต้อง' },
+        { status: 401 }
+      )
+    }
+
+    // อ่าน request body
+    const body = await request.json()
+
+    // ตรวจสอบ input
+    const validation = validateCheckinRequest(body)
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: 'INVALID_INPUT', message: validation.error },
+        { status: 400 }
+      )
+    }
+
+    const { checkin_type, checkin_org_code, action_type, user_lat, user_lng } = body
+
+    // Mock mode
+    if (process.env.USE_MOCK_DATA === 'true') {
+      // ดึงข้อมูลสำนักงานจาก mock data
+      const office = mockOffices.find(o => o.ORG_CODE === checkin_org_code)
+      if (!office) {
+        return NextResponse.json(
+          { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
+          { status: 404 }
+        )
+      }
+
+      const office_lat = office.LAT_WGS84
+      const office_lng = office.LON_WGS84
+
+      // คำนวณระยะห่าง
+      const distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
+      const maxDistance = parseFloat(process.env.MAX_DISTANCE_METERS || '50')
+
+      // ตรวจสอบว่าอยู่ในรัศมี
+      if (!isWithinRange(distance, maxDistance)) {
+        return NextResponse.json(
+          {
+            error: 'OUT_OF_RANGE',
+            message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
+            distance_meter: distance
+          },
+          { status: 400 }
+        )
+      }
+
+      // ตรวจสอบ double check-in (Business Rule)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const latestLogs = mockAttendanceLogs
+        .filter(log => log.emp_id === payload.emp_id && log.action_time >= today)
+        .sort((a, b) => b.action_time.getTime() - a.action_time.getTime())
+
+      if (latestLogs.length > 0) {
+        const latestLog = latestLogs[0]
+
+        // กรณีกด IN ซ้ำในวันเดียวกัน (ยังไม่ OUT)
+        if (action_type === 'IN' && latestLog.action_type === 'IN') {
+          const timeStr = latestLog.action_time.toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          return NextResponse.json(
+            {
+              error: 'ALREADY_CHECKED_IN',
+              message: `คุณได้ลงเวลาเข้างานแล้วเมื่อ ${timeStr} น.`
+            },
+            { status: 400 }
+          )
+        }
+
+        // กรณีกด OUT โดยยังไม่มี IN วันนี้
+        if (action_type === 'OUT' && latestLog.action_type === 'OUT') {
+          return NextResponse.json(
+            {
+              error: 'NO_CHECKIN_FOUND',
+              message: 'ไม่พบรายการเข้างานของวันนี้'
+            },
+            { status: 400 }
+          )
+        }
+      } else {
+        // ไม่มี log วันนี้เลย แต่กด OUT
+        if (action_type === 'OUT') {
+          return NextResponse.json(
+            {
+              error: 'NO_CHECKIN_FOUND',
+              message: 'ไม่พบรายการเข้างานของวันนี้'
+            },
+            { status: 400 }
+          )
+        }
+      }
+
+      // บันทึก mock log
+      const newLog = {
+        emp_id: payload.emp_id,
+        action_type: action_type as 'IN' | 'OUT',
+        action_time: new Date()
+      }
+      mockAttendanceLogs.push(newLog)
+
+      return NextResponse.json({
+        success: true,
+        log_id: mockAttendanceLogs.length,
+        action_time: newLog.action_time.toISOString(),
+        distance_meter: distance
+      })
+    }
+
+    // Real Oracle DB mode
+    // ดึงข้อมูลพิกัดสำนักงานจาก GIS
+    const officeSql = `
+      SELECT ORG_CODE, ORG_NAME, LON_WGS84, LAT_WGS84
+      FROM hrs.v_gis_raot_office
+      WHERE ORG_CODE = :org_code
+    `
+
+    const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
+
+    if (offices.length === 0) {
+      return NextResponse.json(
+        { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
+        { status: 404 }
+      )
+    }
+
+    const office = offices[0]
+    const office_lat = office.LAT_WGS84
+    const office_lng = office.LON_WGS84
+
+    // คำนวณระยะห่าง
+    const distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
+    const maxDistance = parseFloat(process.env.MAX_DISTANCE_METERS || '50')
+
+    // ตรวจสอบว่าอยู่ในรัศมี
+    if (!isWithinRange(distance, maxDistance)) {
+      return NextResponse.json(
+        {
+          error: 'OUT_OF_RANGE',
+          message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
+          distance_meter: distance
+        },
+        { status: 400 }
+      )
+    }
+
+    // ตรวจสอบ double check-in (Business Rule)
+    const checkinSql = `
+      SELECT ACTION_TYPE, ACTION_TIME
+      FROM ATTENDANCE_LOG
+      WHERE EMP_ID = :emp_id
+        AND TRUNC(CAST(ACTION_TIME AS DATE)) = TRUNC(SYSDATE)
+      ORDER BY ACTION_TIME DESC
+      FETCH FIRST 1 ROW ONLY
+    `
+
+    const latestLogs = await executeQuery<LatestAttendance>(checkinSql, {
+      emp_id: payload.emp_id
+    })
+
+    if (latestLogs.length > 0) {
+      const latestLog = latestLogs[0]
+
+      // กรณีกด IN ซ้ำในวันเดียวกัน (ยังไม่ OUT)
+      if (action_type === 'IN' && latestLog.ACTION_TYPE === 'IN') {
+        const timeStr = new Date(latestLog.ACTION_TIME).toLocaleTimeString('th-TH', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        return NextResponse.json(
+          {
+            error: 'ALREADY_CHECKED_IN',
+            message: `คุณได้ลงเวลาเข้างานแล้วเมื่อ ${timeStr} น.`
+          },
+          { status: 400 }
+        )
+      }
+
+      // กรณีกด OUT โดยยังไม่มี IN วันนี้
+      if (action_type === 'OUT' && latestLog.ACTION_TYPE === 'OUT') {
+        return NextResponse.json(
+          {
+            error: 'NO_CHECKIN_FOUND',
+            message: 'ไม่พบรายการเข้างานของวันนี้'
+          },
+          { status: 400 }
+        )
+      }
+    } else {
+      // ไม่มี log วันนี้เลย แต่กด OUT
+      if (action_type === 'OUT') {
+        return NextResponse.json(
+          {
+            error: 'NO_CHECKIN_FOUND',
+            message: 'ไม่พบรายการเข้างานของวันนี้'
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // ดึงข้อมูล User-Agent สำหรับ audit trail
+    const userAgent = request.headers.get('user-agent') || ''
+    const deviceInfo = userAgent.substring(0, 500) // จำกัดความยาว
+
+    // บันทึก ATTENDANCE_LOG
+    const insertSql = `
+      INSERT INTO ATTENDANCE_LOG (
+        EMP_ID, NATIONAL_ID, FULL_NAME, CHECKIN_TYPE,
+        HOME_ORG_CODE, CHECKIN_ORG_CODE, CHECKIN_ORG_NAME,
+        ACTION_TYPE, ACTION_TIME,
+        USER_LAT, USER_LNG, OFFICE_LAT, OFFICE_LNG,
+        DISTANCE_METER, IS_WITHIN_RANGE, DEVICE_INFO
+      ) VALUES (
+        :emp_id, :national_id, :full_name, :checkin_type,
+        :home_org_code, :checkin_org_code, :checkin_org_name,
+        :action_type, SYSTIMESTAMP AT TIME ZONE 'Asia/Bangkok',
+        :user_lat, :user_lng, :office_lat, :office_lng,
+        :distance_meter, :is_within_range, :device_info
+      )
+      RETURNING LOG_ID, ACTION_TIME INTO :log_id, :action_time
+    `
+
+    const result = await executeNonQuery(insertSql, {
+      emp_id: payload.emp_id,
+      national_id: payload.national_id,
+      full_name: payload.full_name,
+      checkin_type: checkin_type,
+      home_org_code: payload.org_code,
+      checkin_org_code: checkin_org_code,
+      checkin_org_name: office.ORG_NAME,
+      action_type: action_type,
+      user_lat: user_lat,
+      user_lng: user_lng,
+      office_lat: office_lat,
+      office_lng: office_lng,
+      distance_meter: distance,
+      is_within_range: 'Y',
+      device_info: deviceInfo,
+      log_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      action_time: { dir: oracledb.BIND_OUT, type: oracledb.DATE }
+    })
+
+    const outBinds = result.outBinds as { log_id: number[]; action_time: Date[] }
+
+    return NextResponse.json({
+      success: true,
+      log_id: outBinds.log_id[0],
+      action_time: outBinds.action_time[0].toISOString(),
+      distance_meter: distance
+    })
+  } catch (error) {
+    console.error('Checkin error:', error)
+    return NextResponse.json(
+      { error: 'INTERNAL_ERROR', message: 'เกิดข้อผิดพลาดในระบบ' },
+      { status: 500 }
+    )
+  }
+}

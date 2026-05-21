@@ -1,0 +1,115 @@
+import { executeQuery } from './oracle'
+import { mockEmployees } from './mock-data'
+import type { AuthProvider, UserProfile, HrEmployee } from '@/types'
+
+// Mock AuthProvider สำหรับ development
+export class MockAuthProvider implements AuthProvider {
+  getAuthUrl(): string {
+    // Mock ไม่ต้อง redirect ไปไหน
+    return '/api/auth/mock-thaid'
+  }
+
+  async handleCallback(code: string): Promise<UserProfile> {
+    // Mock: code คือ national_id
+    return this.authenticateByNationalId(code)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async validateToken(_token: string): Promise<UserProfile> {
+    // Mock: ไม่ต้อง validate กับ external service
+    throw new Error('Use JWT validation instead')
+  }
+
+  // ยืนยันตัวตนด้วยเลขบัตรประชาชน
+  async authenticateByNationalId(nationalId: string): Promise<UserProfile> {
+    // ใช้ mock data ถ้าเปิดใช้งาน
+    if (process.env.USE_MOCK_DATA === 'true') {
+      const emp = mockEmployees.find(e => e.PRV_CIZ_ID === nationalId)
+      if (!emp) {
+        throw new Error('NOT_FOUND')
+      }
+      return {
+        emp_id: emp.EMP_CODE,
+        national_id: emp.PRV_CIZ_ID,
+        full_name: emp.EMP_NAME,
+        org_code: emp.DEPT_PAID_CODE,
+        org_name: emp.DEPT_PAID_NAME
+      }
+    }
+
+    // Query ข้อมูลพนักงานจาก HR view
+    const sql = `
+      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME
+      FROM fss.V_PN_EMP_OTH
+      WHERE PRV_CIZ_ID = :national_id
+        AND EMP_STATUS != 4
+    `
+
+    const employees = await executeQuery<HrEmployee>(sql, { national_id: nationalId })
+
+    if (employees.length === 0) {
+      throw new Error('NOT_FOUND')
+    }
+
+    const emp = employees[0]
+
+    return {
+      emp_id: emp.EMP_CODE,
+      national_id: emp.PRV_CIZ_ID,
+      full_name: emp.EMP_NAME,
+      org_code: emp.DEPT_PAID_CODE,
+      org_name: emp.DEPT_PAID_NAME
+    }
+  }
+}
+
+// ThaIDAuthProvider สำหรับ production (เตรียมไว้สำหรับอนาคต)
+export class ThaIDAuthProvider implements AuthProvider {
+  private clientId: string
+  private clientSecret: string
+  private redirectUri: string
+
+  constructor() {
+    this.clientId = process.env.THAID_CLIENT_ID || ''
+    this.clientSecret = process.env.THAID_CLIENT_SECRET || ''
+    this.redirectUri = process.env.THAID_REDIRECT_URI || ''
+  }
+
+  getAuthUrl(): string {
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.clientId,
+      redirect_uri: this.redirectUri,
+      scope: 'pid'
+    })
+    return `https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?${params.toString()}`
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async handleCallback(_code: string): Promise<UserProfile> {
+    // TODO: Implement ThaID OAuth2 callback
+    // 1. Exchange code for token
+    // 2. Get user info from ThaID
+    // 3. Map pid (national_id) to HR data
+    throw new Error('ThaID authentication not implemented yet')
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async validateToken(_token: string): Promise<UserProfile> {
+    // TODO: Implement ThaID token validation
+    throw new Error('ThaID authentication not implemented yet')
+  }
+}
+
+// Factory สำหรับสร้าง AuthProvider ตาม environment
+export function createAuthProvider(): AuthProvider {
+  const authType = process.env.AUTH_TYPE || 'mock'
+
+  switch (authType) {
+    case 'thaid':
+      return new ThaIDAuthProvider()
+    case 'mock':
+    default:
+      return new MockAuthProvider()
+  }
+}
