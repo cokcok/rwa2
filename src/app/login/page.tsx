@@ -162,6 +162,34 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* ปุ่ม Login ด้วย ThaID */}
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">หรือ</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
+          >
+            <img
+              src="/thaid_icon.png"
+              alt="ThaID"
+              className="w-8 h-8"
+            />
+            <span className="text-blue-600 font-semibold text-lg">
+              เข้าสู่ระบบด้วย ThaID
+            </span>
+          </button>
+        </div>
+
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800">
             <strong>หมายเหตุ:</strong> ระบบนี้เป็นเวอร์ชันจำลอง (Mock)

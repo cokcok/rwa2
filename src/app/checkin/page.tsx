@@ -87,7 +87,7 @@ export default function CheckinPage() {
   const handleLocationObtained = (lat: number, lng: number, dist: number) => {
     setUserLat(lat)
     setUserLng(lng)
-    setIsWithinRange(dist <= 50)
+    setIsWithinRange(dist <= 200)
   }
 
   const handleCheckin = async (actionType: 'IN' | 'OUT') => {
