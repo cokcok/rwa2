@@ -63,16 +63,22 @@ export class MockAuthProvider implements AuthProvider {
   }
 }
 
-// ThaIDAuthProvider สำหรับ production (เตรียมไว้สำหรับอนาคต)
+// ThaIDAuthProvider สำหรับ production
 export class ThaIDAuthProvider implements AuthProvider {
   private clientId: string
   private clientSecret: string
   private redirectUri: string
+  private authorizeEndpoint: string
+  private tokenEndpoint: string
+  private userinfoEndpoint: string
 
   constructor() {
     this.clientId = process.env.THAID_CLIENT_ID || ''
     this.clientSecret = process.env.THAID_CLIENT_SECRET || ''
     this.redirectUri = process.env.THAID_REDIRECT_URI || ''
+    this.authorizeEndpoint = process.env.THAID_AUTHORIZE_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/'
+    this.tokenEndpoint = process.env.THAID_TOKEN_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/'
+    this.userinfoEndpoint = process.env.THAID_USERINFO_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/'
   }
 
   getAuthUrl(): string {
@@ -82,22 +88,101 @@ export class ThaIDAuthProvider implements AuthProvider {
       redirect_uri: this.redirectUri,
       scope: 'pid'
     })
-    return `https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?${params.toString()}`
+    return `${this.authorizeEndpoint}?${params.toString()}`
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async handleCallback(_code: string): Promise<UserProfile> {
-    // TODO: Implement ThaID OAuth2 callback
-    // 1. Exchange code for token
-    // 2. Get user info from ThaID
-    // 3. Map pid (national_id) to HR data
-    throw new Error('ThaID authentication not implemented yet')
+  async handleCallback(code: string): Promise<UserProfile> {
+    // 1. แลก code เป็น token
+    const tokenResponse = await fetch(this.tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: this.clientId,
+        client_secret: this.clientSecret,
+        redirect_uri: this.redirectUri,
+      }),
+    })
+
+    if (!tokenResponse.ok) {
+      const errText = await tokenResponse.text()
+      console.error('ThaID token exchange failed:', errText)
+      throw new Error('TOKEN_EXCHANGE_FAILED')
+    }
+
+    const tokenData = await tokenResponse.json()
+    const accessToken = tokenData.access_token
+
+    if (!accessToken) {
+      throw new Error('NO_ACCESS_TOKEN')
+    }
+
+    // 2. ดึงข้อมูล user (pid = เลขบัตรประชาชน)
+    const userinfoResponse = await fetch(this.userinfoEndpoint, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!userinfoResponse.ok) {
+      console.error('ThaID userinfo failed:', await userinfoResponse.text())
+      throw new Error('USERINFO_FAILED')
+    }
+
+    const userinfo = await userinfoResponse.json()
+    const nationalId = userinfo.pid
+
+    if (!nationalId) {
+      throw new Error('NO_PID_IN_USERINFO')
+    }
+
+    // 3. ใช้ national_id ไป query ข้อมูลพนักงานจาก HR
+    return this.authenticateByNationalId(nationalId)
+  }
+
+  // ดึงข้อมูลพนักงานจาก HR ด้วย national_id (reuse จาก base logic)
+  private async authenticateByNationalId(nationalId: string): Promise<UserProfile> {
+    if (process.env.USE_MOCK_DATA === 'true') {
+      const emp = mockEmployees.find(e => e.PRV_CIZ_ID === nationalId)
+      if (!emp) throw new Error('NOT_FOUND')
+      return {
+        emp_id: emp.EMP_CODE,
+        national_id: emp.PRV_CIZ_ID,
+        full_name: emp.EMP_NAME,
+        org_code: emp.DEPT_PAID_CODE,
+        org_name: emp.DEPT_PAID_NAME
+      }
+    }
+
+    const sql = `
+      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME
+      FROM fss.V_PN_EMP_OTH
+      WHERE PRV_CIZ_ID = :national_id
+        AND EMP_STATUS != 4
+    `
+
+    const employees = await executeQuery<HrEmployee>(sql, { national_id: nationalId })
+
+    if (employees.length === 0) {
+      throw new Error('NOT_FOUND')
+    }
+
+    const emp = employees[0]
+    return {
+      emp_id: emp.EMP_CODE,
+      national_id: emp.PRV_CIZ_ID,
+      full_name: emp.EMP_NAME,
+      org_code: emp.DEPT_PAID_CODE,
+      org_name: emp.DEPT_PAID_NAME
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async validateToken(_token: string): Promise<UserProfile> {
-    // TODO: Implement ThaID token validation
-    throw new Error('ThaID authentication not implemented yet')
+    throw new Error('Use JWT validation instead')
   }
 }
 

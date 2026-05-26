@@ -1,11 +1,19 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ThaiIdInput from '@/components/ThaiIdInput'
 import LoadingSpinner from '@/components/LoadingSpinner'
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner message="กำลังโหลด..." />}>
+      <LoginPageContent />
+    </Suspense>
+  )
+}
+
+function LoginPageContent() {
   const [nationalId, setNationalId] = useState('1100800354530')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -14,6 +22,17 @@ export default function LoginPage() {
     org_name: string
   } | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const isThaidMode = process.env.NEXT_PUBLIC_AUTH_TYPE === 'thaid'
+
+  // รับ error จาก ThaID callback redirect
+  useEffect(() => {
+    const callbackError = searchParams.get('error')
+    if (callbackError) {
+      setError(callbackError)
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,7 +77,28 @@ export default function LoginPage() {
     }
   }
 
-  // ถ้า login สำเร็จ แสดงข้อมูลผู้ใช้
+  const handleThaIDLogin = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      const response = await fetch('/api/auth/thaid')
+      const data = await response.json()
+
+      if (data.auth_url) {
+        window.location.href = data.auth_url
+      } else {
+        setError('ไม่สามารถเชื่อมต่อ ThaID ได้')
+      }
+    } catch (err) {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อ ThaID')
+      console.error('ThaID login error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ถ้า login สำเร็จ (mock mode) แสดงข้อมูลผู้ใช้
   if (userProfile) {
     return (
       <div className="min-h-[calc(100vh-180px)] flex items-center justify-center p-4">
@@ -110,92 +150,100 @@ export default function LoginPage() {
             เข้าสู่ระบบลงเวลาทำงาน
           </h2>
           <p className="text-gray-600">
-            จำลองการยืนยันตัวตนด้วย ThaID
+            {isThaidMode ? 'ยืนยันตัวตนด้วย ThaID' : 'จำลองการยืนยันตัวตนด้วย ThaID'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <ThaiIdInput
-            value={nationalId}
-            onChange={(value) => {
-              setNationalId(value)
-              setError('')
-            }}
-            error={error}
-            disabled={loading}
-          />
+        {/* แสดง error จาก ThaID callback */}
+        {error && isThaidMode && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+        )}
 
-          {error && !nationalId && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-600 text-sm">{error}</p>
+        {/* Mock form - แสดงเฉพาะเมื่อไม่ใช่ ThaID mode */}
+        {!isThaidMode && (
+          <>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <ThaiIdInput
+                value={nationalId}
+                onChange={(value) => {
+                  setNationalId(value)
+                  setError('')
+                }}
+                error={error}
+                disabled={loading}
+              />
+
+              <button
+                type="submit"
+                disabled={loading || nationalId.length === 0}
+                className="w-full btn-primary flex items-center justify-center gap-2 py-4 text-lg"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>กำลังยืนยันตัวตน...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                      />
+                    </svg>
+                    <span>จำลองการยืนยันตัวตน</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-gray-500">หรือ</span>
+                </div>
+              </div>
             </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || nationalId.length === 0}
-            className="w-full btn-primary flex items-center justify-center gap-2 py-4 text-lg"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                <span>กำลังยืนยันตัวตน...</span>
-              </>
-            ) : (
-              <>
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
-                <span>จำลองการยืนยันตัวตน</span>
-              </>
-            )}
-          </button>
-        </form>
+          </>
+        )}
 
         {/* ปุ่ม Login ด้วย ThaID */}
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">หรือ</span>
-            </div>
+        <button
+          type="button"
+          onClick={handleThaIDLogin}
+          disabled={loading}
+          className={`${isThaidMode ? '' : 'mt-4'} w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors`}
+        >
+          <img
+            src="/thaid_icon.png"
+            alt="ThaID"
+            className="w-8 h-8"
+          />
+          <span className="text-blue-600 font-semibold text-lg">
+            เข้าสู่ระบบด้วย ThaID
+          </span>
+        </button>
+
+        {!isThaidMode && (
+          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>หมายเหตุ:</strong> ระบบนี้เป็นเวอร์ชันจำลอง (Mock)
+              สำหรับทดสอบเท่านั้น ใช้เลขบัตรประชาชน 13 หลักที่มีในระบบ HR
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            <img
-              src="/thaid_icon.png"
-              alt="ThaID"
-              className="w-8 h-8"
-            />
-            <span className="text-blue-600 font-semibold text-lg">
-              เข้าสู่ระบบด้วย ThaID
-            </span>
-          </button>
-        </div>
-
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <p className="text-sm text-blue-800">
-            <strong>หมายเหตุ:</strong> ระบบนี้เป็นเวอร์ชันจำลอง (Mock)
-            สำหรับทดสอบเท่านั้น ใช้เลขบัตรประชาชน 13 หลักที่มีในระบบ HR
-          </p>
-        </div>
+        )}
       </div>
     </div>
   )
