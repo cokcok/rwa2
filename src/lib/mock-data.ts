@@ -76,17 +76,22 @@ export const mockOffices: GisOffice[] = [
   }
 ]
 
-// บันทึกเวลาจำลอง (สำหรับทดสอบ double check-in)
-export const mockAttendanceLogs: Array<{
+// ประเภทข้อมูลสำหรับ mock log
+export interface MockLogEntry {
   emp_id: string
+  national_id: string
+  full_name: string
+  checkin_type: 'OFFICE' | 'SUPPORT'
+  checkin_org_code: string
+  checkin_org_name: string
   action_type: 'IN' | 'OUT'
   action_time: Date
-}> = [
-  // ตัวอย่าง: EMP001 เข้างานแล้ววันนี้
-  // ( uncomment เพื่อทดสอบ double check-in )
-  // {
-  //   emp_id: 'EMP001',
-  //   action_type: 'IN',
-  //   action_time: new Date()
-  // }
-]
+  user_lat: number
+  user_lng: number
+  office_lat: number
+  office_lng: number
+  distance_meter: number
+}
+
+// บันทึกเวลาจำลอง (สำหรับทดสอบ double check-in)
+export const mockAttendanceLogs: MockLogEntry[] = []

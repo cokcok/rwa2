@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MockAuthProvider } from '@/lib/auth-provider'
+import { findEmployeeByNationalId } from '@/lib/auth-provider'
 import { signToken, createJwtCookie } from '@/lib/jwt'
 import { rateLimitMiddleware } from '@/lib/rate-limit'
 
@@ -24,11 +24,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // ยืนยันตัวตนผ่าน MockAuthProvider
-    const authProvider = new MockAuthProvider()
-
     try {
-      const userProfile = await authProvider.authenticateByNationalId(national_id)
+      const userProfile = await findEmployeeByNationalId(national_id)
 
       // สร้าง JWT token
       const token = signToken(userProfile)

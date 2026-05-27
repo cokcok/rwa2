@@ -7,7 +7,7 @@ import LocationVerifier from '@/components/LocationVerifier'
 import AttendanceButtons from '@/components/AttendanceButtons'
 import ResultModal from '@/components/ResultModal'
 import LoadingSpinner from '@/components/LoadingSpinner'
-import type { OfficeLocation } from '@/types'
+import type { OfficeLocation, TodayRecord } from '@/types'
 
 // สร้างลิงก์ Google Maps
 function getGoogleMapsLink(lat: number, lng: number, label: string): string {
@@ -32,6 +32,10 @@ export default function CheckinPage() {
   const [userLng, setUserLng] = useState(0)
   const [isWithinRange, setIsWithinRange] = useState(false)
 
+  // Today records
+  const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
+  const [todayRecordsLoading, setTodayRecordsLoading] = useState(true)
+
   // Modal state
   const [showModal, setShowModal] = useState(false)
   const [modalSuccess, setModalSuccess] = useState(false)
@@ -40,6 +44,26 @@ export default function CheckinPage() {
   const [modalDistance, setModalDistance] = useState(0)
   const [modalError, setModalError] = useState('')
   const [modalMessage, setModalMessage] = useState('')
+
+  const fetchTodayRecords = async () => {
+    try {
+      setTodayRecordsLoading(true)
+      const response = await fetch('/api/attendance/today')
+      console.log('[Today] Response status:', response.status)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[Today] Records count:', data.length, data)
+        setTodayRecords(data)
+      } else {
+        const errData = await response.json()
+        console.error('[Today] API error:', errData)
+      }
+    } catch (err) {
+      console.error('[Today] Failed to fetch:', err)
+    } finally {
+      setTodayRecordsLoading(false)
+    }
+  }
 
   useEffect(() => {
     // ดึงข้อมูลจาก sessionStorage
@@ -63,6 +87,8 @@ export default function CheckinPage() {
       latitude: parseFloat(storedLat),
       longitude: parseFloat(storedLng)
     })
+
+    fetchTodayRecords()
   }, [router])
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -115,6 +141,7 @@ export default function CheckinPage() {
         setModalDistance(data.distance_meter)
         setModalError('')
         setModalMessage('')
+        fetchTodayRecords()
       } else {
         setModalSuccess(false)
         setModalActionType(actionType)
@@ -197,6 +224,42 @@ export default function CheckinPage() {
               </span>
             </div>
           </div>
+
+          {/* รายการลงเวลาวันนี้ */}
+          {!todayRecordsLoading && todayRecords.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                การลงเวลาในวันนี้
+              </h4>
+              <div className="space-y-2">
+                {todayRecords.map((record, index) => (
+                  <div key={index} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        record.action_type === 'IN'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {record.action_type === 'IN' ? 'เข้างาน' : 'ออกงาน'}
+                      </span>
+                      <span className="text-sm text-gray-600">{record.checkin_org_name}</span>
+                    </div>
+                    <span className="text-sm font-mono text-gray-500">
+                      {new Date(record.action_time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {todayRecords[todayRecords.length - 1].action_type === 'IN' && (
+                <p className="mt-2 text-xs text-amber-600 text-center">
+                  ⚠ ยังไม่ได้ลงเวลาออกงาน
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* พิกัดสำนักงาน */}

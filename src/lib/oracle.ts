@@ -107,6 +107,40 @@ export async function executeNonQuery(
   }
 }
 
+// Execute query ด้วย session timezone ที่กำหนด (หลีกเลี่ยง ORA-01805)
+export async function executeQueryWithSessionTz<T>(
+  sql: string,
+  params: oracledb.BindParameters = {},
+  timezone: string = '+07:00'
+): Promise<T[]> {
+  let connection: oracledb.Connection | null = null
+
+  try {
+    connection = await getConnection()
+
+    // กำหนด session timezone เป็น numeric offset
+    // เพื่อไม่ต้องค้น timezone region name → ไม่เกิด ORA-01805
+    await connection.execute(`ALTER SESSION SET TIME_ZONE = '${timezone}'`)
+
+    const result = await connection.execute(sql, params, {
+      outFormat: oracledb.OUT_FORMAT_OBJECT
+    })
+
+    return (result.rows || []) as T[]
+  } catch (error) {
+    console.error('Database query error:', error)
+    throw error
+  } finally {
+    if (connection) {
+      try {
+        await connection.close()
+      } catch (error) {
+        console.error('Error closing connection:', error)
+      }
+    }
+  }
+}
+
 // ปิด connection pool
 export async function closePool(): Promise<void> {
   if (pool) {

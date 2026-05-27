@@ -103,3 +103,13 @@ export interface ApiError {
   error: string
   message: string
 }
+
+// รายการลงเวลาของวันนี้
+export interface TodayRecord {
+  action_type: 'IN' | 'OUT'
+  action_time: string
+  checkin_type: 'OFFICE' | 'SUPPORT'
+  checkin_org_name: string
+  distance_meter: number
+  full_name: string
+}

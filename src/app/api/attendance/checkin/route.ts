@@ -82,8 +82,18 @@ export async function POST(request: NextRequest) {
       // บันทึก mock log
       const newLog = {
         emp_id: payload.emp_id,
+        national_id: payload.national_id,
+        full_name: payload.full_name,
+        checkin_type: checkin_type,
+        checkin_org_code: checkin_org_code,
+        checkin_org_name: office.ORG_NAME,
         action_type: action_type as 'IN' | 'OUT',
-        action_time: new Date()
+        action_time: new Date(),
+        user_lat: user_lat,
+        user_lng: user_lng,
+        office_lat: office_lat,
+        office_lng: office_lng,
+        distance_meter: distance
       }
       mockAttendanceLogs.push(newLog)
 

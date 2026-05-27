@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import ThaiIdInput from '@/components/ThaiIdInput'
 import LoadingSpinner from '@/components/LoadingSpinner'
 
@@ -14,6 +14,15 @@ export default function LoginPage() {
     org_name: string
   } | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // รับ error จาก ThaID callback redirect
+  useEffect(() => {
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam))
+    }
+  }, [searchParams])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -175,7 +184,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => { window.location.href = '/api/auth/thaid-login' }}
             disabled={loading}
             className="mt-4 w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
           >
