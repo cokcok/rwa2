@@ -8,6 +8,8 @@ interface User {
   full_name: string
   org_code: string
   org_name: string
+  thai_name?: string
+  birthdate?: string
 }
 
 export function useAuth() {

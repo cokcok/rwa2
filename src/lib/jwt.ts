@@ -6,13 +6,16 @@ const JWT_EXPIRES_IN = '8h' // อายุ 8 ชั่วโมง (1 วัน
 
 // สร้าง JWT token
 export function signToken(user: UserProfile): string {
-  const payload = {
+  const payload: Record<string, string> = {
     emp_id: user.emp_id,
     national_id: user.national_id,
     full_name: user.full_name,
     org_code: user.org_code,
     org_name: user.org_name
   }
+
+  if (user.thai_name) payload.thai_name = user.thai_name
+  if (user.birthdate) payload.birthdate = user.birthdate
 
   return jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,

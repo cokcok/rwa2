@@ -70,7 +70,6 @@ export class ThaIDAuthProvider implements AuthProvider {
   private redirectUri: string
   private authorizeEndpoint: string
   private tokenEndpoint: string
-  private userinfoEndpoint: string
 
   constructor() {
     this.clientId = process.env.THAID_CLIENT_ID || ''
@@ -78,7 +77,6 @@ export class ThaIDAuthProvider implements AuthProvider {
     this.redirectUri = process.env.THAID_REDIRECT_URI || ''
     this.authorizeEndpoint = process.env.THAID_AUTHORIZE_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/'
     this.tokenEndpoint = process.env.THAID_TOKEN_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/'
-    this.userinfoEndpoint = process.env.THAID_USERINFO_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/'
   }
 
   getAuthUrl(): string {
@@ -86,7 +84,8 @@ export class ThaIDAuthProvider implements AuthProvider {
       response_type: 'code',
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
-      scope: 'pid'
+      scope: 'pid name birthdate', // ขอข้อมูลที่จำเป็นจาก ThaID
+      state: 'raot' // สามารถใส่ state เพื่อป้องกัน CSRF ได้ (optional) 
     })
     return `${this.authorizeEndpoint}?${params.toString()}`
   }
@@ -97,6 +96,7 @@ export class ThaIDAuthProvider implements AuthProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Basic authorization',
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
@@ -114,33 +114,22 @@ export class ThaIDAuthProvider implements AuthProvider {
     }
 
     const tokenData = await tokenResponse.json()
-    const accessToken = tokenData.access_token
-
-    if (!accessToken) {
-      throw new Error('NO_ACCESS_TOKEN')
-    }
-
-    // 2. ดึงข้อมูล user (pid = เลขบัตรประชาชน)
-    const userinfoResponse = await fetch(this.userinfoEndpoint, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
-
-    if (!userinfoResponse.ok) {
-      console.error('ThaID userinfo failed:', await userinfoResponse.text())
-      throw new Error('USERINFO_FAILED')
-    }
-
-    const userinfo = await userinfoResponse.json()
-    const nationalId = userinfo.pid
+    const nationalId = tokenData.pid
+    const thaiName = tokenData.name || ''
+    const birthdate = tokenData.birthdate || ''
 
     if (!nationalId) {
-      throw new Error('NO_PID_IN_USERINFO')
+      throw new Error('NO_PID_IN_TOKEN_RESPONSE')
     }
 
     // 3. ใช้ national_id ไป query ข้อมูลพนักงานจาก HR
-    return this.authenticateByNationalId(nationalId)
+    const profile = await this.authenticateByNationalId(nationalId)
+
+    // เพิ่มข้อมูลจาก ThaID
+    profile.thai_name = thaiName
+    profile.birthdate = birthdate
+
+    return profile
   }
 
   // ดึงข้อมูลพนักงานจาก HR ด้วย national_id (reuse จาก base logic)

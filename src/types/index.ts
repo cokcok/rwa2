@@ -5,6 +5,8 @@ export interface UserProfile {
   full_name: string
   org_code: string
   org_name: string
+  thai_name?: string
+  birthdate?: string
 }
 
 // Interface สำหรับ Auth Provider (รองรับ Mock และ ThaID จริง)
@@ -71,6 +73,8 @@ export interface JwtPayload {
   full_name: string
   org_code: string
   org_name: string
+  thai_name?: string
+  birthdate?: string
   iat: number
   exp: number
 }

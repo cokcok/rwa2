@@ -51,12 +51,8 @@ export async function GET(request: NextRequest) {
           case 'TOKEN_EXCHANGE_FAILED':
             errorMessage = 'ไม่สามารถแลก token ได้'
             break
-          case 'USERINFO_FAILED':
-            errorMessage = 'ไม่สามารถดึงข้อมูลผู้ใช้ได้'
-            break
-          case 'NO_ACCESS_TOKEN':
-          case 'NO_PID_IN_USERINFO':
-            errorMessage = 'ข้อมูลจาก ThaID ไม่ถูกต้อง'
+          case 'NO_PID_IN_TOKEN_RESPONSE':
+            errorMessage = 'ไม่ได้รับข้อมูลจาก ThaID'
             break
         }
       }

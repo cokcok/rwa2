@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
       emp_id: payload.emp_id,
       full_name: payload.full_name,
       org_code: payload.org_code,
-      org_name: payload.org_name
+      org_name: payload.org_name,
+      thai_name: payload.thai_name || '',
+      birthdate: payload.birthdate || ''
     })
   } catch (error) {
     console.error('Auth me error:', error)

@@ -100,6 +100,9 @@ export default function SelectPage() {
               <p className="text-sm text-gray-500">ลงเวลาในนาม</p>
               <p className="text-lg font-semibold text-gray-800">{user.full_name}</p>
               <p className="text-sm text-gray-600">{user.org_name}</p>
+              {user.thai_name && (
+                <p className="text-xs text-blue-500 mt-1">ThaID: {user.thai_name} {user.birthdate && `(${user.birthdate})`}</p>
+              )}
             </div>
             <button
               onClick={logout}
