@@ -89,7 +89,8 @@ export default function CheckinPage() {
   const fetchTodayRecords = useCallback(async () => {
     try {
       setLoadingRecords(true)
-      const response = await fetch('/api/attendance/today')
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      const response = await fetch(`${bp}/api/attendance/today`)
       if (response.ok) {
         const data = await response.json()
         setTodayRecords(data.records || [])
@@ -141,7 +142,8 @@ export default function CheckinPage() {
 
   const handleCheckin = async (actionType: 'IN' | 'OUT') => {
     try {
-      const response = await fetch('/api/attendance/checkin', {
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      const response = await fetch(`${bp}/api/attendance/checkin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

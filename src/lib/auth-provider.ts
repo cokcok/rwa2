@@ -100,7 +100,7 @@ export class ThaIDAuthProvider implements AuthProvider {
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        code,
+        code: code,
         client_id: this.clientId,
         client_secret: this.clientSecret,
         redirect_uri: this.redirectUri,
@@ -114,9 +114,13 @@ export class ThaIDAuthProvider implements AuthProvider {
     }
 
     const tokenData = await tokenResponse.json()
+    console.log('ThaID token response:', JSON.stringify(tokenData, null, 2))
+
     const nationalId = tokenData.pid
     const thaiName = tokenData.name || ''
     const birthdate = tokenData.birthdate || ''
+
+    console.log('ThaID user info:', { pid: nationalId, name: thaiName, birthdate })
 
     if (!nationalId) {
       throw new Error('NO_PID_IN_TOKEN_RESPONSE')

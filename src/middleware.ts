@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Base URL สำหรับ redirect (prog1-test เป็น intranet)
+const APP_BASE_URL = process.env.APP_BASE_URL || 'https://prog1-test.raot.co.th'
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ''
+
 // Routes ที่ต้องการ authentication
 const protectedRoutes = ['/select', '/checkin']
 
@@ -41,8 +45,7 @@ export function middleware(request: NextRequest) {
 
     if (!sessionCookie) {
       // ไม่มี cookie → redirect ไป login
-      const loginUrl = new URL('/login', request.url)
-      return NextResponse.redirect(loginUrl)
+      return NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
     }
 
     // ตรวจสอบ JWT (decode เท่านั้น ไม่ verify signature)
@@ -50,8 +53,7 @@ export function middleware(request: NextRequest) {
 
     if (!payload) {
       // JWT ไม่ถูกต้อง → redirect ไป login
-      const loginUrl = new URL('/login', request.url)
-      const response = NextResponse.redirect(loginUrl)
+      const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
       response.cookies.delete('session')
       return response
     }
@@ -60,8 +62,7 @@ export function middleware(request: NextRequest) {
     const now = Math.floor(Date.now() / 1000)
     const exp = typeof payload.exp === 'number' ? payload.exp : 0
     if (exp > 0 && exp < now) {
-      const loginUrl = new URL('/login', request.url)
-      const response = NextResponse.redirect(loginUrl)
+      const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
       response.cookies.delete('session')
       return response
     }
@@ -76,36 +77,24 @@ export function middleware(request: NextRequest) {
         const now = Math.floor(Date.now() / 1000)
         const exp = typeof payload.exp === 'number' ? payload.exp : 0
         if (exp === 0 || exp >= now) {
-          const selectUrl = new URL('/select', request.url)
-          return NextResponse.redirect(selectUrl)
+          return NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/select`)
         }
       }
     }
   }
 
-  // เพิ่ม security headers
-  const response = NextResponse.next()
-
-  // ป้องกัน clickjacking
-  response.headers.set('X-Frame-Options', 'DENY')
-
-  // ป้องกัน MIME type sniffing
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-
-  // Referrer policy
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-
-  // Permissions policy
-  response.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(self)'
-  )
-
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 }

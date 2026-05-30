@@ -33,7 +33,7 @@ export default function RootLayout({
         <header className="bg-gradient-to-r from-yellow-500 via-yellow-400 to-amber-500 shadow-lg">
           <div className="max-w-4xl mx-auto px-4 py-5">
             <div className="flex items-center justify-center gap-3">
-              <img src="/logo1.png" alt="RAOT Logo" className="w-12 h-12 rounded-full shadow-md" />
+              <img src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/logo1.png`} alt="RAOT Logo" className="w-12 h-12 rounded-full shadow-md" />
               <div className="text-center">
                 <h1 className="text-2xl font-bold text-green-800 tracking-wide drop-shadow-sm">
                   ระบบลงเวลาทำงาน

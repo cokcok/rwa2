@@ -21,7 +21,8 @@ export default function TestDbPage() {
     setResult(null)
 
     try {
-      const res = await fetch('/api/test-db')
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      const res = await fetch(`${bp}/api/test-db`)
       const data = await res.json()
       setResult(data)
     } catch (err) {

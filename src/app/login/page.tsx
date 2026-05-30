@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import ThaiIdInput from '@/components/ThaiIdInput'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import { withBasePath } from '@/lib/config'
 
 export default function LoginPage() {
   return (
@@ -40,7 +41,7 @@ function LoginPageContent() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/mock-thaid', {
+      const response = await fetch(withBasePath('/api/auth/mock-thaid'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -82,7 +83,7 @@ function LoginPageContent() {
     setLoading(true)
 
     try {
-      const response = await fetch('/api/auth/thaid')
+      const response = await fetch(withBasePath('/api/auth/thaid'))
       const data = await response.json()
 
       if (data.auth_url) {
@@ -227,7 +228,7 @@ function LoginPageContent() {
           className={`${isThaidMode ? '' : 'mt-4'} w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border-2 border-blue-600 rounded-lg hover:bg-blue-50 transition-colors`}
         >
           <img
-            src="/thaid_icon.png"
+            src={withBasePath('/thaid_icon.png')}
             alt="ThaID"
             className="w-8 h-8"
           />

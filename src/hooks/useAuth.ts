@@ -23,7 +23,8 @@ export function useAuth() {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/auth/me')
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      const response = await fetch(`${bp}/api/auth/me`)
       if (response.ok) {
         const data = await response.json()
         setUser(data)
@@ -42,7 +43,8 @@ export function useAuth() {
   const logout = async () => {
     try {
       // เรียก server-side endpoint เพื่อลบ httpOnly cookie
-      await fetch('/api/auth/logout', { method: 'POST' })
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      await fetch(`${bp}/api/auth/logout`, { method: 'POST' })
     } catch (error) {
       console.error('Logout error:', error)
     } finally {

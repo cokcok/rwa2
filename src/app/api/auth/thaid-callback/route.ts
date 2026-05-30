@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ThaIDAuthProvider } from '@/lib/auth-provider'
-import { signToken, createJwtCookie } from '@/lib/jwt'
+import { signToken } from '@/lib/jwt'
+import { APP_BASE_URL, withBasePath } from '@/lib/config'
 
 // GET /api/auth/thaid-callback
-// ThaID OAuth2 callback - รับ code จาก DOPA แล้วแลกเป็น token
+// ThaID OAuth2 callback - รับ code จาก DOPA แลกเป็น token
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -14,13 +15,15 @@ export async function GET(request: NextRequest) {
     if (error) {
       const errorDescription = searchParams.get('error_description') || 'เกิดข้อผิดพลาด'
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(errorDescription)}`, request.url)
+        `${APP_BASE_URL}${withBasePath('/login')}?error=${encodeURIComponent(errorDescription)}`
       )
     }
 
+    console.log('ThaID callback code:', code)
+
     if (!code) {
       return NextResponse.redirect(
-        new URL('/login?error=ไม่ได้รับ authorization code', request.url)
+        `${APP_BASE_URL}${withBasePath('/login')}?error=ไม่ได้รับ authorization code`
       )
     }
 
@@ -33,13 +36,21 @@ export async function GET(request: NextRequest) {
       // สร้าง JWT token
       const token = signToken(userProfile)
 
-      // redirect ไปหน้า select พร้อมตั้ง cookie
-      const response = NextResponse.redirect(
-        new URL('/select', request.url)
-      )
-      response.headers.set('Set-Cookie', createJwtCookie(token))
+      // ส่ง HTML form auto-submit ไป prog1-test เพื่อ set cookie (cross-domain)
+      const html = `<!DOCTYPE html>
+<html>
+<head><title>กำลังเข้าสู่ระบบ...</title></head>
+<body>
+<form id="f" method="POST" action="${APP_BASE_URL}${withBasePath('/api/auth/session')}">
+  <input type="hidden" name="token" value="${token}" />
+</form>
+<script>document.getElementById('f').submit();</script>
+</body>
+</html>`
 
-      return response
+      return new NextResponse(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
     } catch (err) {
       let errorMessage = 'เกิดข้อผิดพลาดในการยืนยันตัวตน'
 
@@ -58,13 +69,13 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(errorMessage)}`, request.url)
+        `${APP_BASE_URL}${withBasePath('/login')}?error=${encodeURIComponent(errorMessage)}`
       )
     }
   } catch (error) {
     console.error('ThaID callback error:', error)
     return NextResponse.redirect(
-      new URL('/login?error=เกิดข้อผิดพลาดในระบบ', request.url)
+      `${APP_BASE_URL}${withBasePath('/login')}?error=เกิดข้อผิดพลาดในระบบ`
     )
   }
 }

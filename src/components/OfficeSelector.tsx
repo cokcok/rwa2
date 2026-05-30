@@ -35,7 +35,8 @@ export default function OfficeSelector({ value, onChange, error, disabled }: Off
   const fetchOffices = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/offices')
+      const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+      const response = await fetch(`${bp}/api/offices`)
       if (!response.ok) {
         throw new Error('ไม่สามารถดึงข้อมูลสังกัดได้')
       }
