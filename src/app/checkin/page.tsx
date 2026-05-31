@@ -52,6 +52,7 @@ export default function CheckinPage() {
   const [isWithinRange, setIsWithinRange] = useState(false)
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [loadingRecords, setLoadingRecords] = useState(true)
+  const [now, setNow] = useState<Date | null>(null)
 
   // Modal state
   const [showModal, setShowModal] = useState(false)
@@ -115,6 +116,34 @@ export default function CheckinPage() {
     }
   }, [office, skipLocation])
 
+  // Sync เวลาจาก server
+  useEffect(() => {
+    let offset = 0
+    let timer: ReturnType<typeof setInterval>
+
+    const syncAndStart = async () => {
+      try {
+        const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+        const t0 = Date.now()
+        const res = await fetch(`${bp}/api/time`)
+        const t1 = Date.now()
+        const data = await res.json()
+        // ชดเชย network latency
+        const serverTime = data.timestamp + (t1 - t0) / 2
+        offset = serverTime - t1
+      } catch {
+        offset = 0
+      }
+
+      const tick = () => setNow(new Date(Date.now() + offset))
+      tick()
+      timer = setInterval(tick, 1000)
+    }
+
+    syncAndStart()
+    return () => clearInterval(timer)
+  }, [])
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleLocationVerified = (lat: number, lng: number, _dist: number) => {
     setLocationVerified(true)
@@ -154,6 +183,7 @@ export default function CheckinPage() {
           action_type: actionType,
           user_lat: userLat,
           user_lng: userLng,
+          client_timestamp: Date.now(),
         }),
       })
 
@@ -223,6 +253,31 @@ export default function CheckinPage() {
             >
               เปลี่ยนประเภท
             </button>
+          </div>
+
+          {/* วันที่และเวลา realtime */}
+          <div className="text-center mb-4 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+            {now ? (
+              <>
+                <div className="text-lg font-semibold text-gray-800">
+                  {now.toLocaleDateString('th-TH', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </div>
+                <div className="text-3xl font-bold text-blue-700 font-mono tracking-wider mt-1">
+                  {now.toLocaleTimeString('th-TH', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="text-gray-500">กำลังซิงค์เวลา...</div>
+            )}
           </div>
 
           <div className="space-y-3">

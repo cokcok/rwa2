@@ -47,7 +47,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { checkin_type, checkin_org_code, action_type, user_lat, user_lng } = body
+    const { checkin_type, checkin_org_code, action_type, user_lat, user_lng, client_timestamp } = body
+
+    // ตรวจสอบว่าเวลาเครื่อง client ห่างจาก server เกินกำหนดหรือไม่
+    if (client_timestamp) {
+      const serverNow = Date.now()
+      const diffMs = Math.abs(serverNow - client_timestamp)
+      const maxDiffSec = parseInt(process.env.MAX_TIME_DIFF_SECONDS || '300')
+      const maxDiffMs = maxDiffSec * 1000
+      if (diffMs > maxDiffMs) {
+        const diffSec = Math.round(diffMs / 1000)
+        const diffMin = Math.round(diffSec / 60)
+        return NextResponse.json(
+          {
+            error: 'TIME_MISMATCH',
+            message: `เวลาเครื่องของคุณห่างจาก server เกิน ${diffMin} นาที กรุณาปรับเวลาเครื่องให้ถูกต้อง (ห่าง ${diffSec} วินาที)`,
+          },
+          { status: 400 }
+        )
+      }
+    }
 
     // Mock mode
     if (process.env.USE_MOCK_DATA === 'true') {

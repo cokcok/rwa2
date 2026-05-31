@@ -15,7 +15,7 @@ export default function LoginPage() {
 }
 
 function LoginPageContent() {
-  const [nationalId, setNationalId] = useState('')
+  const [nationalId, setNationalId] = useState('1100800354530')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [userProfile, setUserProfile] = useState<{
