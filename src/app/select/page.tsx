@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import OfficeSelector from '@/components/OfficeSelector'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import { withBasePath } from '@/lib/config'
 import type { OfficeLocation } from '@/types'
 
 export default function SelectPage() {
@@ -39,7 +40,7 @@ export default function SelectPage() {
     try {
       if (selectedType === 'OFFICE') {
         // ดึงพิกัดสำนักงานของพนักงาน
-        const response = await fetch(`/api/offices/${user?.org_code}`)
+        const response = await fetch(withBasePath(`/api/offices/${user?.org_code}`))
         if (!response.ok) {
           if (response.status === 404) {
             setError('ไม่พบข้อมูลพิกัดสำนักงานของสังกัดคุณ กรุณาติดต่อผู้ดูแลระบบ')
@@ -100,9 +101,9 @@ export default function SelectPage() {
               <p className="text-sm text-gray-500">ลงเวลาในนาม</p>
               <p className="text-lg font-semibold text-gray-800">{user.full_name}</p>
               <p className="text-sm text-gray-600">{user.org_name}</p>
-              {user.thai_name && (
+              {/*user.thai_name && (
                 <p className="text-xs text-blue-500 mt-1">ThaID: {user.thai_name} {user.birthdate && `(${user.birthdate})`}</p>
-              )}
+              )*/}
             </div>
             <button
               onClick={logout}

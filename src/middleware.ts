@@ -7,20 +7,6 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ''
 // Routes ที่ต้องการ authentication
 const protectedRoutes = ['/select', '/checkin']
 
-// ตรวจสอบ JWT แบบง่าย (ไม่ใช้ jsonwebtoken เพราะ Edge runtime ไม่รองรับ)
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-
-    const payload = parts[1]
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    return JSON.parse(decoded)
-  } catch {
-    return null
-  }
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -48,38 +34,49 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
     }
 
-    // ตรวจสอบ JWT (decode เท่านั้น ไม่ verify signature)
-    const payload = decodeJwtPayload(sessionCookie.value)
+    // มี cookie → ตรวจสอบ JWT (decode เท่านั้น ไม่ verify signature)
+    try {
+      const parts = sessionCookie.value.split('.')
+      if (parts.length !== 3) {
+        // JWT ไม่ถูกต้อง → ลบ cookie แล้ว redirect ไป login
+        const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
+        response.cookies.set('session', '', { maxAge: 0, path: '/' })
+        return response
+      }
 
-    if (!payload) {
-      // JWT ไม่ถูกต้อง → redirect ไป login
-      const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
-      response.cookies.delete('session')
-      return response
-    }
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+      const now = Math.floor(Date.now() / 1000)
 
-    // ตรวจสอบว่า token หมดอายุหรือไม่
-    const now = Math.floor(Date.now() / 1000)
-    const exp = typeof payload.exp === 'number' ? payload.exp : 0
-    if (exp > 0 && exp < now) {
+      // ตรวจสอบ exp
+      const exp = typeof payload.exp === 'number' ? payload.exp : 0
+      if (exp > 0 && exp < now) {
+        const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
+        response.cookies.set('session', '', { maxAge: 0, path: '/' })
+        return response
+      }
+
+      // ตรวจสอบ iat - ถ้า token ออกมานานเกิน 30 นาที ให้ login ใหม่
+      const iat = typeof payload.iat === 'number' ? payload.iat : 0
+      if (iat > 0 && (now - iat) > 30 * 60) {
+        const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
+        response.cookies.set('session', '', { maxAge: 0, path: '/' })
+        return response
+      }
+    } catch {
+      // decode ไม่ได้ → ลบ cookie แล้ว redirect
       const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
-      response.cookies.delete('session')
+      response.cookies.set('session', '', { maxAge: 0, path: '/' })
       return response
     }
   }
 
-  // ถ้าอยู่ที่หน้า login แล้วมี session ที่ถูกต้อง → redirect ไป select
-  if (pathname === '/login') {
+  // หน้า login: ลบ cookie เก่าเสมอ บังคับ login ใหม่ทุกครั้ง
+  if (pathname === '/login' || pathname.endsWith('/login')) {
     const sessionCookie = request.cookies.get('session')
     if (sessionCookie) {
-      const payload = decodeJwtPayload(sessionCookie.value)
-      if (payload) {
-        const now = Math.floor(Date.now() / 1000)
-        const exp = typeof payload.exp === 'number' ? payload.exp : 0
-        if (exp === 0 || exp >= now) {
-          return NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/select`)
-        }
-      }
+      const response = NextResponse.next()
+      response.cookies.set('session', '', { maxAge: 0, path: '/' })
+      return response
     }
   }
 
@@ -88,13 +85,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 }

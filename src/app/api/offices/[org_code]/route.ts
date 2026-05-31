@@ -66,11 +66,19 @@ export async function GET(
     // ดึงข้อมูลพิกัดสำนักงานจาก GIS view
     const sql = 'SELECT DEPT_CODE as ORG_CODE,LON_WGS84,LAT_WGS84,NAME_TH as ORG_NAME FROM hrs.v_gis_raot_office WHERE DEPT_CODE = :org_code '
 
+    console.log('Looking up office for org_code:', org_code)
     const offices = await executeQuery<GisOffice>(sql, { org_code })
+    console.log('Found offices:', offices.length)
 
     if (offices.length === 0) {
+      // ลอง query ดูว่ามี DEPT_CODE ใกล้เคียงไหม
+      const similarSql = "SELECT DEPT_CODE, NAME_TH FROM hrs.v_gis_raot_office WHERE DEPT_CODE LIKE :pattern AND ROWNUM <= 5"
+      const pattern = org_code.substring(0, 4) + '%'
+      const similar = await executeQuery<GisOffice>(similarSql, { pattern })
+      console.log('Similar DEPT_CODEs:', similar)
+
       return NextResponse.json(
-        { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงานของสังกัดคุณ กรุณาติดต่อผู้ดูแลระบบ' },
+        { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงานของสังกัดคุณ กรุณาติดต่อผู้ดูแลระบบ', org_code, similar },
         { status: 404 }
       )
     }

@@ -19,11 +19,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(`${APP_BASE_URL}${withBasePath('/login')}?error=token ไม่ถูกต้อง`)
     }
 
-    // set cookie แล้ว redirect ไป select
-    const maxAge = 8 * 60 * 60
+    // set cookie แล้ว redirect ไป select (session cookie - หายเมื่อปิด browser)
     const response = NextResponse.redirect(`${APP_BASE_URL}${withBasePath('/select')}`)
     response.headers.set('Set-Cookie',
-      `session=${token}; HttpOnly; SameSite=Strict; Max-Age=${maxAge}; Path=/; Secure`
+      `session=${token}; HttpOnly; SameSite=Strict; Path=/; Secure`
     )
 
     return response

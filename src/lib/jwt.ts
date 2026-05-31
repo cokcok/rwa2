@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken'
 import type { JwtPayload, UserProfile } from '@/types'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this'
-const JWT_EXPIRES_IN = '8h' // อายุ 8 ชั่วโมง (1 วันทำงาน)
+const JWT_EXPIRES_IN = '1h' // อายุ 1 ชั่วโมง (session cookie)
 
 // สร้าง JWT token
 export function signToken(user: UserProfile): string {
@@ -37,16 +37,14 @@ export function verifyToken(token: string): JwtPayload | null {
   }
 }
 
-// สร้าง cookie string สำหรับ JWT
+// สร้าง cookie string สำหรับ JWT (session cookie - หายเมื่อปิด browser)
 export function createJwtCookie(token: string): string {
-  const maxAge = 8 * 60 * 60 // 8 ชั่วโมงเป็นวินาที
   const isProduction = process.env.NODE_ENV === 'production'
 
   return [
     `session=${token}`,
     'HttpOnly',
     'SameSite=Strict',
-    `Max-Age=${maxAge}`,
     'Path=/',
     isProduction ? 'Secure' : ''
   ]

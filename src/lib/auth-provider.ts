@@ -84,6 +84,7 @@ export class ThaIDAuthProvider implements AuthProvider {
       response_type: 'code',
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
+      verify_type: 'pin',
       scope: 'pid name birthdate', // ขอข้อมูลที่จำเป็นจาก ThaID
       state: 'raot' // สามารถใส่ state เพื่อป้องกัน CSRF ได้ (optional) 
     })
@@ -92,17 +93,26 @@ export class ThaIDAuthProvider implements AuthProvider {
 
   async handleCallback(code: string): Promise<UserProfile> {
     // 1. แลก code เป็น token
+    console.log('ThaID token exchange request:', {
+      tokenEndpoint: this.tokenEndpoint,
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      redirect_uri: this.redirectUri,
+      code: code.substring(0, 20) + '...',
+    })
+
+    // Encode client credentials เป็น Base64 สำหรับ client_secret_basic
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')
+
     const tokenResponse = await fetch(this.tokenEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': 'Basic authorization',
+        'Authorization': `Basic ${basicAuth}`,
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
         redirect_uri: this.redirectUri,
       }),
     })
