@@ -46,13 +46,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ records: todayLogs })
     }
 
-    // Real Oracle DB mode
+    // // ---- โค้ดเดิม: SELECT จาก ATTENDANCE_LOG ----
+    // const sql = `
+    //   SELECT LOG_ID, ACTION_TYPE, ACTION_TIME
+    //   FROM ATTENDANCE_LOG
+    //   WHERE EMP_ID = :emp_id
+    //     AND TRUNC(ACTION_TIME) = TRUNC(SYSDATE)
+    //   ORDER BY ACTION_TIME ASC
+    // `
+    //
+    // const records = await executeQuery<{ LOG_ID: number; ACTION_TYPE: string; ACTION_TIME: Date }>(
+    //   sql,
+    //   { emp_id: payload.emp_id }
+    // )
+    //
+    // const result = records.map(r => ({
+    //   log_id: r.LOG_ID,
+    //   action_type: r.ACTION_TYPE,
+    //   action_time: r.ACTION_TIME instanceof Date ? r.ACTION_TIME.toISOString() : r.ACTION_TIME,
+    // }))
+
+    // ---- SELECT จาก RWA_MAIN ----
     const sql = `
-      SELECT LOG_ID, ACTION_TYPE, ACTION_TIME
-      FROM ATTENDANCE_LOG
-      WHERE EMP_ID = :emp_id
-        AND TRUNC(ACTION_TIME) = TRUNC(SYSDATE)
-      ORDER BY ACTION_TIME ASC
+      SELECT ID as LOG_ID,
+             CASE WHEN NODEID = 1 THEN 'IN' ELSE 'OUT' END as ACTION_TYPE,
+             LOGTIME as ACTION_TIME
+      FROM FSS.RWA_MAIN_DEV
+      WHERE EMP_CODE = :emp_id
+        AND TRUNC(LOGTIME) = TRUNC(SYSDATE)
+      ORDER BY LOGTIME ASC
     `
 
     const records = await executeQuery<{ LOG_ID: number; ACTION_TYPE: string; ACTION_TIME: Date }>(

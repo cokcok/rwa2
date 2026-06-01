@@ -6,9 +6,19 @@ import { validateCheckinRequest } from '@/lib/validation'
 import { CHECKIN_TYPES } from '@/config/checkin-types'
 import type { CheckinType } from '@/config/checkin-types'
 import { calculateDistance, isWithinRange } from '@/lib/geolocation'
+import { isIpInRange } from '@/lib/ip-check'
+import { getCached, setCache } from '@/lib/cache'
 import { rateLimitMiddleware, getClientIp } from '@/lib/rate-limit'
 import { mockOffices, mockAttendanceLogs } from '@/lib/mock-data'
+import { parseUserAgent } from '@/lib/ua-parser'
 import type { GisOffice } from '@/types'
+
+// CHECKTYPE mapping: checkin_type → RWA_MAIN.CHECKTYPE
+const CHECKTYPE_MAP: Record<string, string> = {
+  OFFICE: '0',
+  SUPPORT: '1',
+  WFH: '3',
+}
 
 // POST /api/attendance/checkin
 // ลงเวลาเข้า/ออกงาน
@@ -122,33 +132,68 @@ export async function POST(request: NextRequest) {
     }
 
     // Real Oracle DB mode
-    const skipLocationCheck = CHECKIN_TYPES[checkin_type as CheckinType]?.skipLocationCheck || false
+    const clientIp = getClientIp(request)
+    let skipLocationCheck = CHECKIN_TYPES[checkin_type as CheckinType]?.skipLocationCheck || false
     let office_lat = 0
     let office_lng = 0
     let distance = 0
-    let checkinOrgName = ''
+    let _checkinOrgName = ''  // 保留供将来使用 (เดิมใช้กับ ATTENDANCE_LOG)
 
-    if (!skipLocationCheck) {
-      // ดึงข้อมูลพิกัดสำนักงานจาก GIS
-      const officeSql = `
-        SELECT DEPT_CODE as ORG_CODE, NAME_TH as ORG_NAME, LON_WGS84, LAT_WGS84
-        FROM hrs.v_gis_raot_office
-        WHERE DEPT_CODE = :org_code
-      `
+    // ตรวจสอบ IP ว่าอยู่ในวงสำนักงานหรือไม่ (ถ้าใช่ ข้ามการเช็คพิกัด)
+    // ใช้ cache 10 ชม. (IP ranges ไม่ค่อยเปลี่ยน)
+    if (!skipLocationCheck && clientIp) {
+      const ipCacheKey = `ip_range_${checkin_org_code}`
+      let ipRanges = getCached<{ IP_RANGE1: string; IP_RANGE2: string }[]>(ipCacheKey)
 
-      const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
-
-      if (offices.length === 0) {
-        return NextResponse.json(
-          { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
-          { status: 404 }
+      if (!ipRanges) {
+        const ipRangeSql = `
+          SELECT IP_RANGE1, IP_RANGE2
+          FROM FSS.IPADDRESS_DEPT
+          WHERE DEPT_ID = :dept_id
+            AND CANCEL_FLG != '1'
+        `
+        ipRanges = await executeQuery<{ IP_RANGE1: string; IP_RANGE2: string }>(
+          ipRangeSql,
+          { dept_id: checkin_org_code }
         )
+        setCache(ipCacheKey, ipRanges, 10 * 60 * 60 * 1000) // cache 10 ชม.
       }
 
-      const office = offices[0]
+      for (const range of ipRanges) {
+        if (range.IP_RANGE1 && range.IP_RANGE2 && isIpInRange(clientIp, range.IP_RANGE1, range.IP_RANGE2)) {
+          skipLocationCheck = true
+          break
+        }
+      }
+    }
+
+    if (!skipLocationCheck) {
+      // ดึงข้อมูลพิกัดสำนักงานจาก GIS (cache 1 ชม.)
+      const officeCacheKey = `office_${checkin_org_code}`
+      let office = getCached<GisOffice>(officeCacheKey)
+
+      if (!office) {
+        const officeSql = `
+          SELECT DEPT_CODE as ORG_CODE, NAME_TH as ORG_NAME, LON_WGS84, LAT_WGS84
+          FROM hrs.v_gis_raot_office
+          WHERE DEPT_CODE = :org_code
+        `
+        const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
+
+        if (offices.length === 0) {
+          return NextResponse.json(
+            { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
+            { status: 404 }
+          )
+        }
+
+        office = offices[0]
+        setCache(officeCacheKey, office, 60 * 60 * 1000) // cache 1 ชม.
+      }
+
       office_lat = office.LAT_WGS84
       office_lng = office.LON_WGS84
-      checkinOrgName = office.ORG_NAME
+      _checkinOrgName = office.ORG_NAME
 
       // คำนวณระยะห่าง
       distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
@@ -166,62 +211,110 @@ export async function POST(request: NextRequest) {
         )
       }
     } else {
-      // WFH: ใช้ชื่อสังกัดจาก JWT
-      checkinOrgName = payload.org_name || checkin_org_code
+      // WFH หรือ IP ตรงวง: ใช้ชื่อสังกัดจาก JWT
+      _checkinOrgName = payload.org_name || checkin_org_code
     }
 
-    // ดึงข้อมูล User-Agent สำหรับ audit trail
+    // ดึงข้อมูล User-Agent
     const userAgent = request.headers.get('user-agent') || ''
-    const deviceInfo = userAgent.substring(0, 500) // จำกัดความยาว
+    const uaInfo = parseUserAgent(userAgent)
 
-    // ดึง IP address ของเครื่องผู้ใช้
-    const clientIp = getClientIp(request)
+    // แปลง checkin_type เป็น CHECKTYPE ของ RWA_MAIN
+    const checktype = CHECKTYPE_MAP[checkin_type] || '0'
+    const nodeid = action_type === 'IN' ? 1 : 2
+    const kmValue = distance > 0 ? (distance / 1000).toFixed(3) : '0'
 
-    // บันทึก ATTENDANCE_LOG
+    // // ---- โค้ดเดิม: INSERT เข้า ATTENDANCE_LOG ----
+    // const insertSql = `
+    //   INSERT INTO ATTENDANCE_LOG (
+    //     EMP_ID, NATIONAL_ID, FULL_NAME, CHECKIN_TYPE,
+    //     HOME_ORG_CODE, CHECKIN_ORG_CODE, CHECKIN_ORG_NAME,
+    //     ACTION_TYPE, ACTION_TIME,
+    //     USER_LAT, USER_LNG, OFFICE_LAT, OFFICE_LNG,
+    //     DISTANCE_METER, IS_WITHIN_RANGE, DEVICE_INFO, CLIENT_IP
+    //   ) VALUES (
+    //     :emp_id, :national_id, :full_name, :checkin_type,
+    //     :home_org_code, :checkin_org_code, :checkin_org_name,
+    //     :action_type, SYSTIMESTAMP AT TIME ZONE 'Asia/Bangkok',
+    //     :user_lat, :user_lng, :office_lat, :office_lng,
+    //     :distance_meter, :is_within_range, :device_info, :client_ip
+    //   )
+    //   RETURNING LOG_ID, ACTION_TIME INTO :log_id, :action_time
+    // `
+    //
+    // const result = await executeNonQuery(insertSql, {
+    //   emp_id: payload.emp_id,
+    //   national_id: payload.national_id,
+    //   full_name: payload.full_name,
+    //   checkin_type: checkin_type,
+    //   home_org_code: payload.org_code,
+    //   checkin_org_code: checkin_org_code,
+    //   checkin_org_name: _checkinOrgName,
+    //   action_type: action_type,
+    //   user_lat: user_lat,
+    //   user_lng: user_lng,
+    //   office_lat: office_lat,
+    //   office_lng: office_lng,
+    //   distance_meter: distance,
+    //   is_within_range: 'Y',
+    //   device_info: deviceInfo,
+    //   client_ip: clientIp,
+    //   log_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+    //   action_time: { dir: oracledb.BIND_OUT, type: oracledb.DATE }
+    // })
+    //
+    // const outBinds = result.outBinds as { log_id: number[]; action_time: Date[] }
+    //
+    // return NextResponse.json({
+    //   success: true,
+    //   log_id: outBinds.log_id[0],
+    //   action_time: outBinds.action_time[0].toISOString(),
+    //   distance_meter: distance
+    // })
+
+    // ---- INSERT เข้า RWA_MAIN ----
     const insertSql = `
-      INSERT INTO ATTENDANCE_LOG (
-        EMP_ID, NATIONAL_ID, FULL_NAME, CHECKIN_TYPE,
-        HOME_ORG_CODE, CHECKIN_ORG_CODE, CHECKIN_ORG_NAME,
-        ACTION_TYPE, ACTION_TIME,
-        USER_LAT, USER_LNG, OFFICE_LAT, OFFICE_LNG,
-        DISTANCE_METER, IS_WITHIN_RANGE, DEVICE_INFO, CLIENT_IP
+      INSERT INTO FSS.RWA_MAIN_DEV (
+        ID, EMP_CODE, LOGTIME, NODEID, DEPT_ID,
+        LAT_WGS84, LON_WGS84,
+        BROWSER, BROWSER_VERSION, DEVICE, OS, OS_VERSION, USERAGENT,
+        IP_ADDRESS, CREATE_DATE, CHECKTYPE, KM, PHPIP, PROBLEM_CAUSE
       ) VALUES (
-        :emp_id, :national_id, :full_name, :checkin_type,
-        :home_org_code, :checkin_org_code, :checkin_org_name,
-        :action_type, SYSTIMESTAMP AT TIME ZONE 'Asia/Bangkok',
-        :user_lat, :user_lng, :office_lat, :office_lng,
-        :distance_meter, :is_within_range, :device_info, :client_ip
+        FSS.RWA_MAIN_SEQ.NEXTVAL, :emp_code, SYSDATE, :nodeid, :dept_id,
+        :lat_wgs84, :lon_wgs84,
+        :browser, :browser_version, :device, :os, :os_version, :useragent,
+        :ip_address, SYSDATE, :checktype, :km, :phpip, :problem_cause
       )
-      RETURNING LOG_ID, ACTION_TIME INTO :log_id, :action_time
+      RETURNING ID, LOGTIME INTO :id, :logtime
     `
 
     const result = await executeNonQuery(insertSql, {
-      emp_id: payload.emp_id,
-      national_id: payload.national_id,
-      full_name: payload.full_name,
-      checkin_type: checkin_type,
-      home_org_code: payload.org_code,
-      checkin_org_code: checkin_org_code,
-      checkin_org_name: checkinOrgName,
-      action_type: action_type,
-      user_lat: user_lat,
-      user_lng: user_lng,
-      office_lat: office_lat,
-      office_lng: office_lng,
-      distance_meter: distance,
-      is_within_range: 'Y',
-      device_info: deviceInfo,
-      client_ip: clientIp,
-      log_id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
-      action_time: { dir: oracledb.BIND_OUT, type: oracledb.DATE }
+      emp_code: payload.emp_id,
+      nodeid: nodeid,
+      dept_id: checkin_org_code,
+      lat_wgs84: user_lat,
+      lon_wgs84: user_lng,
+      browser: uaInfo.browser,
+      browser_version: uaInfo.browserVersion,
+      device: uaInfo.device,
+      os: uaInfo.os,
+      os_version: uaInfo.osVersion,
+      useragent: userAgent.substring(0, 255),
+      ip_address: clientIp,
+      checktype: checktype,
+      km: kmValue,
+      phpip: clientIp,
+      problem_cause: null,
+      id: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER },
+      logtime: { dir: oracledb.BIND_OUT, type: oracledb.DATE }
     })
 
-    const outBinds = result.outBinds as { log_id: number[]; action_time: Date[] }
+    const outBinds = result.outBinds as { id: number[]; logtime: Date[] }
 
     return NextResponse.json({
       success: true,
-      log_id: outBinds.log_id[0],
-      action_time: outBinds.action_time[0].toISOString(),
+      log_id: outBinds.id[0],       // RWA_MAIN.ID
+      action_time: outBinds.logtime[0].toISOString(),  // RWA_MAIN.LOGTIME
       distance_meter: distance
     })
   } catch (error) {
