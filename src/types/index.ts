@@ -24,13 +24,15 @@ export interface OfficeLocation {
   longitude: number
 }
 
+import type { CheckinType } from '@/config/checkin-types'
+
 // บันทึกเวลาทำงาน
 export interface AttendanceRecord {
   log_id: number
   emp_id: string
   national_id: string
   full_name: string
-  checkin_type: 'OFFICE' | 'SUPPORT'
+  checkin_type: CheckinType
   home_org_code: string
   checkin_org_code: string
   checkin_org_name: string
@@ -49,7 +51,7 @@ export interface AttendanceRecord {
 
 // คำขอลงเวลา
 export interface CheckinRequest {
-  checkin_type: 'OFFICE' | 'SUPPORT'
+  checkin_type: CheckinType
   checkin_org_code: string
   action_type: 'IN' | 'OUT'
   user_lat: number

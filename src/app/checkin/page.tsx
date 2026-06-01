@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import LocationVerifier from '@/components/LocationVerifier'
 import AttendanceButtons from '@/components/AttendanceButtons'
 import ResultModal from '@/components/ResultModal'
 import LoadingSpinner from '@/components/LoadingSpinner'
+import { CHECKIN_TYPES, getTypeColorClasses } from '@/config/checkin-types'
+import type { CheckinType } from '@/config/checkin-types'
 import type { OfficeLocation } from '@/types'
 
 interface TodayRecord {
@@ -40,9 +42,7 @@ export default function CheckinPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
 
-  const skipLocation = process.env.NEXT_PUBLIC_SKIP_LOCATION === 'true'
-
-  const [checkinType, setCheckinType] = useState<'OFFICE' | 'SUPPORT'>('OFFICE')
+  const [checkinType, setCheckinType] = useState<CheckinType>('OFFICE')
   const [orgCode, setOrgCode] = useState('')
   const [orgName, setOrgName] = useState('')
   const [office, setOffice] = useState<OfficeLocation | null>(null)
@@ -50,9 +50,14 @@ export default function CheckinPage() {
   const [userLat, setUserLat] = useState(0)
   const [userLng, setUserLng] = useState(0)
   const [isWithinRange, setIsWithinRange] = useState(false)
+  const [locationError, setLocationError] = useState('')
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [loadingRecords, setLoadingRecords] = useState(true)
   const [now, setNow] = useState<Date | null>(null)
+
+  const skipLocation = useMemo(() => {
+    return CHECKIN_TYPES[checkinType]?.skipLocationCheck || process.env.NEXT_PUBLIC_SKIP_LOCATION === 'true' || process.env.NEXT_PUBLIC_SKIP_LOCATION === 'mock'
+  }, [checkinType])
 
   // Modal state
   const [showModal, setShowModal] = useState(false)
@@ -68,23 +73,32 @@ export default function CheckinPage() {
     const storedType = sessionStorage.getItem('checkin_type')
     const storedOrgCode = sessionStorage.getItem('checkin_org_code')
     const storedOrgName = sessionStorage.getItem('checkin_org_name')
-    const storedLat = sessionStorage.getItem('office_lat')
-    const storedLng = sessionStorage.getItem('office_lng')
 
-    if (!storedType || !storedOrgCode || !storedLat || !storedLng) {
+    if (!storedType || !storedOrgCode) {
       router.push('/select')
       return
     }
 
-    setCheckinType(storedType as 'OFFICE' | 'SUPPORT')
+    const isSkip = CHECKIN_TYPES[storedType as CheckinType]?.skipLocationCheck || false
+    const storedLat = sessionStorage.getItem('office_lat')
+    const storedLng = sessionStorage.getItem('office_lng')
+
+    if (!isSkip && (!storedLat || !storedLng)) {
+      router.push('/select')
+      return
+    }
+
+    setCheckinType(storedType as CheckinType)
     setOrgCode(storedOrgCode)
     setOrgName(storedOrgName || '')
-    setOffice({
-      org_code: storedOrgCode,
-      org_name: storedOrgName || '',
-      latitude: parseFloat(storedLat),
-      longitude: parseFloat(storedLng)
-    })
+    if (storedLat && storedLng) {
+      setOffice({
+        org_code: storedOrgCode,
+        org_name: storedOrgName || '',
+        latitude: parseFloat(storedLat),
+        longitude: parseFloat(storedLng)
+      })
+    }
   }, [router])
 
   const fetchTodayRecords = useCallback(async () => {
@@ -108,13 +122,22 @@ export default function CheckinPage() {
   }, [fetchTodayRecords])
 
   useEffect(() => {
-    if (office && skipLocation) {
-      setUserLat(office.latitude)
-      setUserLng(office.longitude)
+    if (skipLocation) {
       setLocationVerified(true)
       setIsWithinRange(true)
+      // ดึง GPS เก็บไว้ (ไม่เช็คระยะ)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setUserLat(pos.coords.latitude)
+            setUserLng(pos.coords.longitude)
+          },
+          () => { /* ไม่ได้ GPS ก็ไม่เป็นไร */ },
+          { enableHighAccuracy: true, timeout: 10000 }
+        )
+      }
     }
-  }, [office, skipLocation])
+  }, [skipLocation])
 
   // Sync เวลาจาก server
   useEffect(() => {
@@ -150,14 +173,20 @@ export default function CheckinPage() {
     setUserLat(lat)
     setUserLng(lng)
     setIsWithinRange(true)
+    setLocationError('')
   }
 
   const handleLocationError = (err: string) => {
     if (err.startsWith('OUT_OF_RANGE')) {
       setLocationVerified(false)
       setIsWithinRange(false)
+      const distStr = err.replace('OUT_OF_RANGE: ', '').replace(' เมตร', '')
+      const dist = parseFloat(distStr)
+      const maxDist = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
+      setLocationError(`คุณอยู่ห่างจากสำนักงาน ${dist.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDist.toFixed(0)} เมตร)`)
     } else {
       setLocationVerified(false)
+      setLocationError(err)
     }
     console.error('Location error:', err)
   }
@@ -166,11 +195,36 @@ export default function CheckinPage() {
   const handleLocationObtained = (lat: number, lng: number, dist: number) => {
     setUserLat(lat)
     setUserLng(lng)
-    setIsWithinRange(dist <= 200)
+    const maxDist = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
+    const inRange = dist <= maxDist
+    setIsWithinRange(inRange)
+    if (inRange) {
+      setLocationError('')
+    }
   }
 
   const handleCheckin = async (actionType: 'IN' | 'OUT') => {
     try {
+      // ถ้ายังไม่ได้ GPS ให้ดึงตอนนี้เลย
+      let lat = userLat
+      let lng = userLng
+      if (lat === 0 && lng === 0 && navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 10000,
+            })
+          })
+          lat = pos.coords.latitude
+          lng = pos.coords.longitude
+          setUserLat(lat)
+          setUserLng(lng)
+        } catch {
+          // ไม่ได้ GPS ส่ง 0 ไป
+        }
+      }
+
       const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
       const response = await fetch(`${bp}/api/attendance/checkin`, {
         method: 'POST',
@@ -181,8 +235,8 @@ export default function CheckinPage() {
           checkin_type: checkinType,
           checkin_org_code: orgCode,
           action_type: actionType,
-          user_lat: userLat,
-          user_lng: userLng,
+          user_lat: lat,
+          user_lng: lng,
           client_timestamp: Date.now(),
         }),
       })
@@ -234,18 +288,18 @@ export default function CheckinPage() {
     return null
   }
 
-  if (!office) {
+  if (!skipLocation && !office) {
     return <LoadingSpinner message="กำลังโหลดข้อมูล..." />
   }
 
   return (
-    <div className="min-h-[calc(100vh-180px)] flex items-center justify-center p-4">
+    <div className="min-h-[calc(100vh-180px)] flex items-start justify-center p-4">
       <div className="max-w-lg w-full">
-        {/* ข้อมูลการลงเวลา */}
+        {/* หัวเรื่อง + วันที่/เวลา + ปุ่มเข้าออก — อยู่ด้านบนสุด */}
         <div className="card mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-xl font-semibold text-gray-800">
-              ลงเวลา{checkinType === 'OFFICE' ? 'จากสำนักงาน' : 'ช่วยปฏิบัติงาน'}
+              ลงเวลา{CHECKIN_TYPES[checkinType]?.label || ''}
             </h2>
             <button
               onClick={() => router.push('/select')}
@@ -280,6 +334,31 @@ export default function CheckinPage() {
             )}
           </div>
 
+          {/* ปุ่มลงเวลา — แสดงด้านบน กดได้ทันที */}
+          {(skipLocation || (locationVerified && isWithinRange)) && (
+            <div className="mb-2">
+              <AttendanceButtons
+                onCheckin={handleCheckin}
+                disabled={false}
+              />
+            </div>
+          )}
+
+          {/* แจ้งเตือนอยู่นอกรัศมี — แสดงตำแหน่งเดียวกับปุ่ม */}
+          {locationError && (
+            <div className="mb-2 p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+              <div className="flex items-center justify-center gap-2 text-red-700 font-medium">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                {locationError}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ข้อมูลผู้ใช้และประวัติวันนี้ */}
+        <div className="card mb-6">
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">ชื่อ:</span>
@@ -296,11 +375,9 @@ export default function CheckinPage() {
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">ประเภท:</span>
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                checkinType === 'OFFICE'
-                  ? 'bg-blue-100 text-blue-800'
-                  : 'bg-green-100 text-green-800'
-              }`}>
-                {checkinType === 'OFFICE' ? 'OFFICE' : 'SUPPORT'}
+                getTypeColorClasses(CHECKIN_TYPES[checkinType]?.color || 'blue').iconBg
+              } ${getTypeColorClasses(CHECKIN_TYPES[checkinType]?.color || 'blue').iconText}`}>
+                {checkinType}
               </span>
             </div>
 
@@ -343,8 +420,8 @@ export default function CheckinPage() {
           </div>
         </div>
 
-        {/* พิกัดสำนักงาน */}
-        {!skipLocation && (
+        {/* พิกัดสำนักงาน + ตรวจสอบตำแหน่ง */}
+        {!skipLocation && office && (
           <div className="card mb-6 border-blue-200 bg-blue-50">
             <h3 className="text-lg font-semibold text-blue-800 mb-3 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -374,34 +451,20 @@ export default function CheckinPage() {
                 ดูพิกัดสำนักงานบน Google Maps
               </a>
             </div>
-          </div>
-        )}
 
-        {/* ตรวจสอบพิกัด */}
-        {!skipLocation && (
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">
-              ตรวจสอบตำแหน่ง
-            </h3>
-            <LocationVerifier
-              office={office}
-              onVerified={handleLocationVerified}
-              onError={handleLocationError}
-              onLocationObtained={handleLocationObtained}
-            />
-          </div>
-        )}
-
-        {/* ปุ่มลงเวลา (แสดงเมื่ออยู่ในรัศมี) */}
-        {locationVerified && isWithinRange && (
-          <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">
-              เลือกรายการ
-            </h3>
-            <AttendanceButtons
-              onCheckin={handleCheckin}
-              disabled={false}
-            />
+            {/* ตรวจสอบพิกัด */}
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <h3 className="text-base font-semibold text-blue-800 mb-3 text-center">
+                ตรวจสอบตำแหน่ง
+              </h3>
+              <LocationVerifier
+                office={office}
+                onVerified={handleLocationVerified}
+                onError={handleLocationError}
+                onLocationObtained={handleLocationObtained}
+                hideRangeError={true}
+              />
+            </div>
           </div>
         )}
 
@@ -414,6 +477,7 @@ export default function CheckinPage() {
             กลับไปเลือกประเภท
           </button>
         </div>
+
       </div>
 
       {/* Result Modal */}

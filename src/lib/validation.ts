@@ -22,9 +22,11 @@ export function isValidNationalIdFormat(id: string): boolean {
   return /^\d{13}$/.test(id)
 }
 
+import { CHECKIN_TYPES } from '@/config/checkin-types'
+
 // ตรวจสอบ checkin_type
 export function isValidCheckinType(type: string): boolean {
-  return ['OFFICE', 'SUPPORT'].includes(type)
+  return Object.keys(CHECKIN_TYPES).includes(type)
 }
 
 // ตรวจสอบ action_type

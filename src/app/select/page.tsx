@@ -6,13 +6,15 @@ import { useAuth } from '@/hooks/useAuth'
 import OfficeSelector from '@/components/OfficeSelector'
 import LoadingSpinner from '@/components/LoadingSpinner'
 import { withBasePath } from '@/lib/config'
+import { CHECKIN_TYPES, getTypeColorClasses, getEnabledTypes } from '@/config/checkin-types'
+import type { CheckinType } from '@/config/checkin-types'
 import type { OfficeLocation } from '@/types'
 
 export default function SelectPage() {
   const { user, loading: authLoading, logout } = useAuth()
   const router = useRouter()
 
-  const [selectedType, setSelectedType] = useState<'OFFICE' | 'SUPPORT' | null>(null)
+  const [selectedType, setSelectedType] = useState<CheckinType | null>(null)
   const [selectedOrgCode, setSelectedOrgCode] = useState('')
   const [selectedOffice, setSelectedOffice] = useState<OfficeLocation | null>(null)
   const [error, setError] = useState('')
@@ -20,7 +22,7 @@ export default function SelectPage() {
 
   // ถ้ายังไม่ได้ login จะถูก redirect โดย useAuth hook
 
-  const handleTypeSelect = (type: 'OFFICE' | 'SUPPORT') => {
+  const handleTypeSelect = (type: CheckinType) => {
     setSelectedType(type)
     setError('')
     setSelectedOrgCode('')
@@ -34,11 +36,22 @@ export default function SelectPage() {
   }
 
   const handleProceed = async () => {
+    if (!selectedType) return
     setError('')
     setLoading(true)
 
+    const typeConfig = CHECKIN_TYPES[selectedType]
+
     try {
-      if (selectedType === 'OFFICE') {
+      if (typeConfig.skipLocationCheck) {
+        // ไม่ต้องเช็คพิกัด (เช่น WFH)
+        sessionStorage.setItem('checkin_type', selectedType)
+        sessionStorage.setItem('checkin_org_code', user?.org_code || '')
+        sessionStorage.setItem('checkin_org_name', user?.org_name || '')
+        sessionStorage.removeItem('office_lat')
+        sessionStorage.removeItem('office_lng')
+        router.push('/checkin')
+      } else if (!typeConfig.requiresOfficeSelect) {
         // ดึงพิกัดสำนักงานของพนักงาน
         const response = await fetch(withBasePath(`/api/offices/${user?.org_code}`))
         if (!response.ok) {
@@ -52,22 +65,20 @@ export default function SelectPage() {
         const officeData = await response.json()
         setSelectedOffice(officeData)
 
-        // เก็บข้อมูลใน sessionStorage สำหรับหน้า checkin
-        sessionStorage.setItem('checkin_type', 'OFFICE')
+        sessionStorage.setItem('checkin_type', selectedType)
         sessionStorage.setItem('checkin_org_code', user?.org_code || '')
         sessionStorage.setItem('checkin_org_name', user?.org_name || '')
         sessionStorage.setItem('office_lat', officeData.latitude.toString())
         sessionStorage.setItem('office_lng', officeData.longitude.toString())
 
         router.push('/checkin')
-      } else if (selectedType === 'SUPPORT') {
+      } else {
         if (!selectedOrgCode || !selectedOffice) {
           setError('กรุณาเลือกสังกัด')
           return
         }
 
-        // เก็บข้อมูลใน sessionStorage สำหรับหน้า checkin
-        sessionStorage.setItem('checkin_type', 'SUPPORT')
+        sessionStorage.setItem('checkin_type', selectedType)
         sessionStorage.setItem('checkin_org_code', selectedOrgCode)
         sessionStorage.setItem('checkin_org_name', selectedOffice.org_name)
         sessionStorage.setItem('office_lat', selectedOffice.latitude.toString())
@@ -120,79 +131,49 @@ export default function SelectPage() {
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {/* ปุ่ม OFFICE */}
-          <button
-            onClick={() => handleTypeSelect('OFFICE')}
-            className={`card cursor-pointer transition-all hover:shadow-lg ${
-              selectedType === 'OFFICE'
-                ? 'ring-2 ring-blue-500 bg-blue-50'
-                : 'hover:bg-gray-50'
-            }`}
-          >
-            <div className="text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                จากสำนักงาน
-              </h3>
-              <p className="text-sm text-gray-600">
-                ลงเวลา ณ สำนักงานที่สังกัด
-              </p>
-              <p className="text-xs text-blue-600 mt-2">(OFFICE)</p>
-            </div>
-          </button>
-
-          {/* ปุ่ม SUPPORT */}
-          <button
-            onClick={() => handleTypeSelect('SUPPORT')}
-            className={`card cursor-pointer transition-all hover:shadow-lg ${
-              selectedType === 'SUPPORT'
-                ? 'ring-2 ring-green-500 bg-green-50'
-                : 'hover:bg-gray-50'
-            }`}
-          >
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                ช่วยปฏิบัติงาน
-              </h3>
-              <p className="text-sm text-gray-600">
-                ลงเวลา ณ สำนักงานอื่นที่ไปช่วยงาน
-              </p>
-              <p className="text-xs text-green-600 mt-2">(SUPPORT)</p>
-            </div>
-          </button>
+          {getEnabledTypes().map(([key, type]) => {
+            const colors = getTypeColorClasses(type.color)
+            return (
+              <button
+                key={key}
+                onClick={() => handleTypeSelect(key)}
+                className={`card cursor-pointer transition-all hover:shadow-lg ${
+                  selectedType === key
+                    ? `ring-2 ${colors.ring} ${colors.bg}`
+                    : 'hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className={`w-16 h-16 ${colors.iconBg} rounded-full flex items-center justify-center mx-auto mb-4`}>
+                    <svg
+                      className={`w-8 h-8 ${colors.iconText}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d={type.iconPath}
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                    {type.label}
+                  </h3>
+                  <p className="text-sm text-gray-600">
+                    {type.description}
+                  </p>
+                  <p className={`text-xs ${colors.text} mt-2`}>({key})</p>
+                </div>
+              </button>
+            )
+          })}
         </div>
 
-        {/* Dropdown เลือกสังกัด (สำหรับ SUPPORT) */}
-        {selectedType === 'SUPPORT' && (
+        {/* Dropdown เลือกสังกัด (สำหรับ type ที่ requiresOfficeSelect) */}
+        {selectedType && CHECKIN_TYPES[selectedType].requiresOfficeSelect && (
           <div className="card mb-6">
             <OfficeSelector
               value={selectedOrgCode}
@@ -215,7 +196,7 @@ export default function SelectPage() {
           <div className="text-center">
             <button
               onClick={handleProceed}
-              disabled={loading || (selectedType === 'SUPPORT' && !selectedOrgCode)}
+              disabled={loading || (selectedType !== null && CHECKIN_TYPES[selectedType].requiresOfficeSelect && !selectedOrgCode)}
               className="btn-primary px-12 py-4 text-lg"
             >
               {loading ? (

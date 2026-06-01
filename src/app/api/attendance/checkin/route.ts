@@ -3,6 +3,8 @@ import oracledb from '@/lib/oracle-init'
 import { executeQuery, executeNonQuery } from '@/lib/oracle'
 import { verifyToken } from '@/lib/jwt'
 import { validateCheckinRequest } from '@/lib/validation'
+import { CHECKIN_TYPES } from '@/config/checkin-types'
+import type { CheckinType } from '@/config/checkin-types'
 import { calculateDistance, isWithinRange } from '@/lib/geolocation'
 import { rateLimitMiddleware, getClientIp } from '@/lib/rate-limit'
 import { mockOffices, mockAttendanceLogs } from '@/lib/mock-data'
@@ -70,32 +72,37 @@ export async function POST(request: NextRequest) {
 
     // Mock mode
     if (process.env.USE_MOCK_DATA === 'true') {
-      // ดึงข้อมูลสำนักงานจาก mock data
-      const office = mockOffices.find(o => o.ORG_CODE === checkin_org_code)
-      if (!office) {
-        return NextResponse.json(
-          { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
-          { status: 404 }
-        )
-      }
+      const skipLocationCheck = CHECKIN_TYPES[checkin_type as CheckinType]?.skipLocationCheck || false
+      let distance = 0
 
-      const office_lat = office.LAT_WGS84
-      const office_lng = office.LON_WGS84
+      if (!skipLocationCheck) {
+        // ดึงข้อมูลสำนักงานจาก mock data
+        const office = mockOffices.find(o => o.ORG_CODE === checkin_org_code)
+        if (!office) {
+          return NextResponse.json(
+            { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
+            { status: 404 }
+          )
+        }
 
-      // คำนวณระยะห่าง
-      const distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
-      const maxDistance = parseFloat(process.env.MAX_DISTANCE_METERS || '50')
+        const office_lat = office.LAT_WGS84
+        const office_lng = office.LON_WGS84
 
-      // ตรวจสอบว่าอยู่ในรัศมี
-      if (!isWithinRange(distance, maxDistance)) {
-        return NextResponse.json(
-          {
-            error: 'OUT_OF_RANGE',
-            message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
-            distance_meter: distance
-          },
-          { status: 400 }
-        )
+        // คำนวณระยะห่าง
+        distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
+        const maxDistance = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
+
+        // ตรวจสอบว่าอยู่ในรัศมี
+        if (!isWithinRange(distance, maxDistance)) {
+          return NextResponse.json(
+            {
+              error: 'OUT_OF_RANGE',
+              message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
+              distance_meter: distance
+            },
+            { status: 400 }
+          )
+        }
       }
 
       // บันทึก mock log
@@ -115,40 +122,52 @@ export async function POST(request: NextRequest) {
     }
 
     // Real Oracle DB mode
-    // ดึงข้อมูลพิกัดสำนักงานจาก GIS
-    const officeSql = `
-      SELECT DEPT_CODE as ORG_CODE, NAME_TH as ORG_NAME, LON_WGS84, LAT_WGS84
-      FROM hrs.v_gis_raot_office
-      WHERE DEPT_CODE = :org_code
-    `
+    const skipLocationCheck = CHECKIN_TYPES[checkin_type as CheckinType]?.skipLocationCheck || false
+    let office_lat = 0
+    let office_lng = 0
+    let distance = 0
+    let checkinOrgName = ''
 
-    const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
+    if (!skipLocationCheck) {
+      // ดึงข้อมูลพิกัดสำนักงานจาก GIS
+      const officeSql = `
+        SELECT DEPT_CODE as ORG_CODE, NAME_TH as ORG_NAME, LON_WGS84, LAT_WGS84
+        FROM hrs.v_gis_raot_office
+        WHERE DEPT_CODE = :org_code
+      `
 
-    if (offices.length === 0) {
-      return NextResponse.json(
-        { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
-        { status: 404 }
-      )
-    }
+      const offices = await executeQuery<GisOffice>(officeSql, { org_code: checkin_org_code })
 
-    const office = offices[0]
-    const office_lat = office.LAT_WGS84
-    const office_lng = office.LON_WGS84
+      if (offices.length === 0) {
+        return NextResponse.json(
+          { error: 'OFFICE_NOT_FOUND', message: 'ไม่พบข้อมูลพิกัดสำนักงาน กรุณาติดต่อผู้ดูแลระบบ' },
+          { status: 404 }
+        )
+      }
 
-    // คำนวณระยะห่าง
-    const distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
-    const maxDistance = parseFloat(process.env.MAX_DISTANCE_METERS || '50')
+      const office = offices[0]
+      office_lat = office.LAT_WGS84
+      office_lng = office.LON_WGS84
+      checkinOrgName = office.ORG_NAME
 
-    // ตรวจสอบว่าอยู่ในรัศมี
-    if (!isWithinRange(distance, maxDistance)) {
-      return NextResponse.json(
-        {
-          error: 'OUT_OF_RANGE',
-          message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
-          distance_meter: distance
-        },
-        { status: 400 }
-      )
+      // คำนวณระยะห่าง
+      distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
+      const maxDistance = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
+
+      // ตรวจสอบว่าอยู่ในรัศมี
+      if (!isWithinRange(distance, maxDistance)) {
+        return NextResponse.json(
+          {
+            error: 'OUT_OF_RANGE',
+            message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
+            distance_meter: distance
+          },
+          { status: 400 }
+        )
+      }
+    } else {
+      // WFH: ใช้ชื่อสังกัดจาก JWT
+      checkinOrgName = payload.org_name || checkin_org_code
     }
 
     // ดึงข้อมูล User-Agent สำหรับ audit trail
@@ -183,7 +202,7 @@ export async function POST(request: NextRequest) {
       checkin_type: checkin_type,
       home_org_code: payload.org_code,
       checkin_org_code: checkin_org_code,
-      checkin_org_name: office.ORG_NAME,
+      checkin_org_name: checkinOrgName,
       action_type: action_type,
       user_lat: user_lat,
       user_lng: user_lng,

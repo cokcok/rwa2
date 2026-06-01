@@ -9,11 +9,15 @@ interface LocationVerifierProps {
   onVerified: (userLat: number, userLng: number, distance: number) => void
   onError: (error: string) => void
   onLocationObtained?: (userLat: number, userLng: number, distance: number) => void
+  hideRangeError?: boolean
 }
 
-export default function LocationVerifier({ office, onVerified, onError, onLocationObtained }: LocationVerifierProps) {
+export default function LocationVerifier({ office, onVerified, onError, onLocationObtained, hideRangeError }: LocationVerifierProps) {
+  const maxDistance = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
+  const [isOutOfRange, setIsOutOfRange] = useState(false)
   const [distance, setDistance] = useState<number | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
 
@@ -54,11 +58,12 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
           onLocationObtained(latitude, longitude, dist)
         }
 
-        const maxDistance = 50 // เมตร
         if (dist > maxDistance) {
-          setError(`คุณอยู่ห่างจากสำนักงาน ${formatDistance(dist)} (ต้องไม่เกิน ${maxDistance} เมตร)`)
+          setError(`คุณอยู่ห่างจากสำนักงาน ${formatDistance(dist)} (ต้องไม่เกิน ${maxDistance.toFixed(0)} เมตร)`)
+          setIsOutOfRange(true)
           onError(`OUT_OF_RANGE: ${dist} เมตร`)
         } else {
+          setIsOutOfRange(false)
           onVerified(latitude, longitude, dist)
         }
 
@@ -112,10 +117,10 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
   // แสดงพิกัดตัวเองเสมอ (ไม่ว่าจะอยู่ในรัศมีหรือไม่)
   if (userLocation) {
     return (
-      <div className={`card ${error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+      <div className={`card ${error && !(hideRangeError && isOutOfRange) ? 'border-red-200 bg-red-50' : isOutOfRange ? 'border-yellow-200 bg-yellow-50' : 'border-green-200 bg-green-50'}`}>
         {/* สถานะ */}
         <div className="text-center mb-4">
-          {error ? (
+          {error && !(hideRangeError && isOutOfRange) ? (
             <>
               <svg
                 className="w-12 h-12 text-red-500 mx-auto mb-4"
@@ -135,7 +140,7 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
           ) : (
             <>
               <svg
-                className="w-12 h-12 text-green-500 mx-auto mb-4"
+                className={`w-12 h-12 mx-auto mb-4 ${isOutOfRange ? 'text-yellow-500' : 'text-green-500'}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -144,10 +149,15 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d={isOutOfRange
+                    ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+                    : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  }
                 />
               </svg>
-              <p className="text-green-600 font-medium mb-2">ตรวจสอบตำแหน่งสำเร็จ</p>
+              <p className={`font-medium mb-2 ${isOutOfRange ? 'text-yellow-600' : 'text-green-600'}`}>
+                {isOutOfRange ? 'อยู่นอกรัศมีที่กำหนด' : 'ตรวจสอบตำแหน่งสำเร็จ'}
+              </p>
             </>
           )}
         </div>
@@ -165,7 +175,7 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
           {distance !== null && (
             <div className="flex justify-between items-center py-2 border-t border-gray-200 mt-2">
               <span className="text-gray-600">ระยะห่าง:</span>
-              <span className={`font-medium ${distance <= 50 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`font-medium ${distance <= maxDistance ? 'text-green-600' : hideRangeError ? 'text-yellow-600' : 'text-red-600'}`}>
                 {formatDistance(distance)}
               </span>
             </div>
