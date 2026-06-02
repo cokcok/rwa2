@@ -137,7 +137,6 @@ export async function POST(request: NextRequest) {
     let office_lat = 0
     let office_lng = 0
     let distance = 0
-    let _checkinOrgName = ''  // 保留供将来使用 (เดิมใช้กับ ATTENDANCE_LOG)
 
     // ตรวจสอบ IP ว่าอยู่ในวงสำนักงานหรือไม่ (ถ้าใช่ ข้ามการเช็คพิกัด)
     // ใช้ cache 10 ชม. (IP ranges ไม่ค่อยเปลี่ยน)
@@ -193,8 +192,6 @@ export async function POST(request: NextRequest) {
 
       office_lat = office.LAT_WGS84
       office_lng = office.LON_WGS84
-      _checkinOrgName = office.ORG_NAME
-
       // คำนวณระยะห่าง
       distance = calculateDistance(user_lat, user_lng, office_lat, office_lng)
       const maxDistance = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
@@ -210,9 +207,6 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-    } else {
-      // WFH หรือ IP ตรงวง: ใช้ชื่อสังกัดจาก JWT
-      _checkinOrgName = payload.org_name || checkin_org_code
     }
 
     // ดึงข้อมูล User-Agent
@@ -249,7 +243,7 @@ export async function POST(request: NextRequest) {
     //   checkin_type: checkin_type,
     //   home_org_code: payload.org_code,
     //   checkin_org_code: checkin_org_code,
-    //   checkin_org_name: _checkinOrgName,
+    //   checkin_org_name: checkinOrgName,
     //   action_type: action_type,
     //   user_lat: user_lat,
     //   user_lng: user_lng,
