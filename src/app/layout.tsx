@@ -17,6 +17,16 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "RAOT - ระบบลงเวลาทำงาน",
   description: "RAOT - ระบบลงเวลาทำงาน",
+  themeColor: "#2563eb",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
+  icons: {
+    icon: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/icon.svg`,
+  },
 };
 
 export default function RootLayout({

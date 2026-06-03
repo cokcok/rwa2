@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { useServerTime } from '@/hooks/useServerTime'
 import LocationVerifier from '@/components/LocationVerifier'
 import AttendanceButtons from '@/components/AttendanceButtons'
 import ResultModal from '@/components/ResultModal'
@@ -54,7 +53,7 @@ export default function CheckinPage() {
   const [locationError, setLocationError] = useState('')
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [loadingRecords, setLoadingRecords] = useState(true)
-  const now = useServerTime()   // server time sync — ป้องกัน client clock manipulation
+  const [now, setNow] = useState<Date | null>(null)
 
   const skipLocation = useMemo(() => {
     return CHECKIN_TYPES[checkinType]?.skipLocationCheck || process.env.NEXT_PUBLIC_SKIP_LOCATION === 'true' || process.env.NEXT_PUBLIC_SKIP_LOCATION === 'mock'
@@ -140,8 +139,33 @@ export default function CheckinPage() {
     }
   }, [skipLocation])
 
-  // [ลบ inline clock sync] — ย้ายไปใช้ useServerTime hook แทน
-  // hook จัดการ: initial sync + tick ทุก 1 วิ + re-sync ทุก 60 วิ + cleanup
+  // Sync เวลาจาก server
+  useEffect(() => {
+    let offset = 0
+    let timer: ReturnType<typeof setInterval>
+
+    const syncAndStart = async () => {
+      try {
+        const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+        const t0 = Date.now()
+        const res = await fetch(`${bp}/api/time`)
+        const t1 = Date.now()
+        const data = await res.json()
+        // ชดเชย network latency
+        const serverTime = data.timestamp + (t1 - t0) / 2
+        offset = serverTime - t1
+      } catch {
+        offset = 0
+      }
+
+      const tick = () => setNow(new Date(Date.now() + offset))
+      tick()
+      timer = setInterval(tick, 1000)
+    }
+
+    syncAndStart()
+    return () => clearInterval(timer)
+  }, [])
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleLocationVerified = (lat: number, lng: number, _dist: number) => {

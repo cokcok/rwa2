@@ -29,7 +29,7 @@ function LoginPageContent() {
 
   // รับ error จาก ThaID callback redirect
   useEffect(() => {
-    const callbackError = searchParams.get('error')
+    const callbackError = searchParams?.get('error')
     if (callbackError) {
       setError(callbackError)
     }
@@ -90,11 +90,11 @@ function LoginPageContent() {
         window.location.href = data.auth_url
       } else {
         setError('ไม่สามารถเชื่อมต่อ ThaID ได้')
+        setLoading(false)
       }
     } catch (err) {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ ThaID')
       console.error('ThaID login error:', err)
-    } finally {
       setLoading(false)
     }
   }

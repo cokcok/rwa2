@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#2563eb"/>
+  
+  <!-- Clock face -->
+  <circle cx="256" cy="256" r="180" fill="white" opacity="0.95"/>
+  
+  <!-- Clock border -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#1e40af" stroke-width="6"/>
+  
+  <!-- Hour marks -->
+  <g stroke="#1e40af" stroke-width="4" stroke-linecap="round">
+    <line x1="256" y1="96" x2="256" y2="116"/>
+    <line x1="256" y1="396" x2="256" y2="416"/>
+    <line x1="96" y1="256" x2="116" y2="256"/>
+    <line x1="396" y1="256" x2="416" y2="256"/>
+  </g>
+  
+  <!-- Minute marks -->
+  <g stroke="#93c5fd" stroke-width="2" stroke-linecap="round">
+    <line x1="256" y1="96" x2="256" y2="106"/>
+    <line x1="371" y1="111" x2="366" y2="120"/>
+    <line x1="416" y1="256" x2="406" y2="256"/>
+    <line x1="371" y1="401" x2="366" y2="392"/>
+    <line x1="256" y1="416" x2="256" y2="406"/>
+    <line x1="141" y1="401" x2="146" y2="392"/>
+    <line x1="96" y1="256" x2="106" y2="256"/>
+    <line x1="141" y1="111" x2="146" y2="120"/>
+  </g>
+  
+  <!-- Hour hand (pointing to 9) -->
+  <line x1="256" y1="256" x2="176" y2="256" stroke="#1e3a5f" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Minute hand (pointing to 12) -->
+  <line x1="256" y1="256" x2="256" y2="116" stroke="#1e3a5f" stroke-width="6" stroke-linecap="round"/>
+  
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="8" fill="#dc2626"/>
+  <circle cx="256" cy="256" r="4" fill="white"/>
+  
+  <!-- Person silhouette (attendance) -->
+  <g transform="translate(340, 340)">
+    <circle cx="0" cy="-20" r="25" fill="#2563eb"/>
+    <path d="M-35 15 C-35 -10 35 -10 35 15 L40 50 C40 55 -40 55 -40 50 Z" fill="#2563eb"/>
+  </g>
+</svg>
