@@ -36,21 +36,12 @@ export async function GET(request: NextRequest) {
       // สร้าง JWT token
       const token = signToken(userProfile)
 
-      // ส่ง HTML form auto-submit ไป prog1-test เพื่อ set cookie (cross-domain)
-      const html = `<!DOCTYPE html>
-<html>
-<head><title>กำลังเข้าสู่ระบบ...</title></head>
-<body>
-<form id="f" method="POST" action="${APP_BASE_URL}${withBasePath('/api/auth/session')}">
-  <input type="hidden" name="token" value="${token}" />
-</form>
-<script>document.getElementById('f').submit();</script>
-</body>
-</html>`
-
-      return new NextResponse(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      })
+      // Redirect ไป session endpoint บน prog1-test ด้วย token ใน query param
+      // session endpoint จะ set cookie แล้ว redirect ไป /select
+      // ใช้ 302 redirect ไม่ใช่ fetch เพื่อไม่เปิด tab ใหม่บน mobile
+      return NextResponse.redirect(
+        `${APP_BASE_URL}${withBasePath('/api/auth/session')}?token=${encodeURIComponent(token)}`
+      )
     } catch (err) {
       let errorMessage = 'เกิดข้อผิดพลาดในการยืนยันตัวตน'
 
