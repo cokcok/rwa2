@@ -78,11 +78,29 @@ export default function SelectPage() {
           return
         }
 
+        let officeLat = selectedOffice.latitude
+        let officeLng = selectedOffice.longitude
+
+        // ถ้าหน่วยงานไม่มีพิกัด (เช่น หน่วยงานเพิ่มเติมจาก env) ให้ดึงจาก API
+        if (officeLat === 0 && officeLng === 0) {
+          try {
+            const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+            const officeRes = await fetch(`${bp}/api/offices/${selectedOrgCode}`)
+            if (officeRes.ok) {
+              const officeData = await officeRes.json()
+              officeLat = officeData.latitude
+              officeLng = officeData.longitude
+            }
+          } catch {
+            // ไม่สามารถดึงพิกัดได้ ใช้ค่าเดิม
+          }
+        }
+
         sessionStorage.setItem('checkin_type', selectedType)
         sessionStorage.setItem('checkin_org_code', selectedOrgCode)
         sessionStorage.setItem('checkin_org_name', selectedOffice.org_name)
-        sessionStorage.setItem('office_lat', selectedOffice.latitude.toString())
-        sessionStorage.setItem('office_lng', selectedOffice.longitude.toString())
+        sessionStorage.setItem('office_lat', officeLat.toString())
+        sessionStorage.setItem('office_lng', officeLng.toString())
 
         router.push('/checkin')
       }

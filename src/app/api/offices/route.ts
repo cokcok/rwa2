@@ -40,7 +40,23 @@ export async function GET(request: NextRequest) {
         latitude: office.LAT_WGS84,
         longitude: office.LON_WGS84
       }))
-      return NextResponse.json(result)
+
+      // ดึงหน่วยงานเพิ่มเติมจาก environment variable
+      const extraOfficesRaw = process.env.EXTRA_OFFICES || '[]'
+      let extraOffices: OfficeLocation[] = []
+      try {
+        const parsed = JSON.parse(extraOfficesRaw)
+        extraOffices = parsed.map((o: { org_code: string; org_name: string }) => ({
+          org_code: o.org_code,
+          org_name: o.org_name,
+          latitude: 0,
+          longitude: 0
+        }))
+      } catch (e) {
+        console.error('Failed to parse EXTRA_OFFICES:', e)
+      }
+
+      return NextResponse.json([...result, ...extraOffices])
     }
 
     // ดึงข้อมูลสังกัดจาก GIS view
@@ -59,7 +75,25 @@ export async function GET(request: NextRequest) {
       longitude: office.LON_WGS84
     }))
 
-    return NextResponse.json(result)
+    // ดึงหน่วยงานเพิ่มเติมจาก environment variable
+    const extraOfficesRaw = process.env.EXTRA_OFFICES || '[]'
+    let extraOffices: OfficeLocation[] = []
+    try {
+      const parsed = JSON.parse(extraOfficesRaw)
+      extraOffices = parsed.map((o: { org_code: string; org_name: string }) => ({
+        org_code: o.org_code,
+        org_name: o.org_name,
+        latitude: 0,
+        longitude: 0
+      }))
+    } catch (e) {
+      console.error('Failed to parse EXTRA_OFFICES:', e)
+    }
+
+    // รวมหน่วยงานจาก database + หน่วยงานเพิ่มเติม
+    const combined = [...result, ...extraOffices]
+
+    return NextResponse.json(combined)
   } catch (error) {
     console.error('Offices error:', error)
     return NextResponse.json(
