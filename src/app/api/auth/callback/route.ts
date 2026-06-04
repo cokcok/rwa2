@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
+    const state = searchParams.get('state')
     const error = searchParams.get('error')
 
     // ถ้า ThaID ส่ง error กลับมา
@@ -16,6 +17,14 @@ export async function GET(request: NextRequest) {
       const errorDescription = searchParams.get('error_description') || 'เกิดข้อผิดพลาด'
       return NextResponse.redirect(
         `${APP_BASE_URL}${withBasePath('/login')}?error=${encodeURIComponent(errorDescription)}`
+      )
+    }
+
+    // ตรวจสอบ OAuth state parameter สำหรับ CSRF protection
+    const savedState = request.cookies.get('oauth_state')?.value
+    if (!state || !savedState || state !== savedState) {
+      return NextResponse.redirect(
+        `${APP_BASE_URL}${withBasePath('/login')}?error=CSRF validation failed`
       )
     }
 
@@ -34,21 +43,29 @@ export async function GET(request: NextRequest) {
       // สร้าง JWT token
       const token = signToken(userProfile)
 
+      // Escape token สำหรับ HTML embedding ป้องกัน XSS
+      const escapedToken = token.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
       // ส่ง HTML form auto-submit ไป prog1-test เพื่อ set cookie (cross-domain)
       const html = `<!DOCTYPE html>
 <html>
 <head><title>กำลังเข้าสู่ระบบ...</title></head>
 <body>
 <form id="f" method="POST" action="${APP_BASE_URL}${withBasePath('/api/auth/session')}">
-  <input type="hidden" name="token" value="${token}" />
+  <input type="hidden" name="token" value="${escapedToken}" />
 </form>
 <script>document.getElementById('f').submit();</script>
 </body>
 </html>`
 
-      return new NextResponse(html, {
+      const response = new NextResponse(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
+
+      // ลบ oauth_state cookie หลังใช้แล้ว
+      response.cookies.set('oauth_state', '', { maxAge: 0, path: '/', domain: '.raot.co.th' })
+
+      return response
     } catch (err) {
       let errorMessage = 'เกิดข้อผิดพลาดในการยืนยันตัวตน'
 

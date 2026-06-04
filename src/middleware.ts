@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { jwtVerify } from 'jose'
 
 // Base URL สำหรับ redirect (prog1-test เป็น intranet)
 const APP_BASE_URL = process.env.APP_BASE_URL || 'https://prog1-test.raot.co.th'
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ''
+const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this'
 
 // Routes ที่ต้องการ authentication
 const protectedRoutes = ['/select', '/checkin']
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // ข้าม static files และ API routes
@@ -34,21 +36,16 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
     }
 
-    // มี cookie → ตรวจสอบ JWT (decode เท่านั้น ไม่ verify signature)
+    // มี cookie → ตรวจสอบ JWT signature ด้วย jose (Edge-compatible)
     try {
-      const parts = sessionCookie.value.split('.')
-      if (parts.length !== 3) {
-        // JWT ไม่ถูกต้อง → ลบ cookie แล้ว redirect ไป login
-        const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
-        response.cookies.set('session', '', { maxAge: 0, path: '/' })
-        return response
-      }
-
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-      const now = Math.floor(Date.now() / 1000)
+      const secret = new TextEncoder().encode(JWT_SECRET)
+      const { payload } = await jwtVerify(sessionCookie.value, secret, {
+        algorithms: ['HS256']
+      })
 
       // ตรวจสอบ exp
       const exp = typeof payload.exp === 'number' ? payload.exp : 0
+      const now = Math.floor(Date.now() / 1000)
       if (exp > 0 && exp < now) {
         const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
         response.cookies.set('session', '', { maxAge: 0, path: '/' })
@@ -63,7 +60,7 @@ export function middleware(request: NextRequest) {
         return response
       }
     } catch {
-      // decode ไม่ได้ → ลบ cookie แล้ว redirect
+      // verify ไม่ผิด → ลบ cookie แล้ว redirect
       const response = NextResponse.redirect(`${APP_BASE_URL}${BASE_PATH}/login`)
       response.cookies.set('session', '', { maxAge: 0, path: '/' })
       return response

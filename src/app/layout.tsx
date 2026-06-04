@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import IdleLogout from "@/components/IdleLogout";
 
 import "./globals.css";
 
@@ -59,7 +60,7 @@ export default function RootLayout({
 
         {/* Main Content */}
         <main className="max-w-4xl mx-auto">
-          {children}
+          <IdleLogout>{children}</IdleLogout>
         </main>
 
         {/* Footer */}

@@ -1,9 +1,27 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import oracledb from '@/lib/oracle-init'
+import { verifyToken } from '@/lib/jwt'
 
 // GET /api/test-db
-// ทดสอบการเชื่อมต่อ Oracle DB
-export async function GET() {
+// ทดสอบการเชื่อมต่อ Oracle DB (ต้อง login ก่อน)
+export async function GET(request: NextRequest) {
+  // ตรวจสอบ authentication
+  const sessionCookie = request.cookies.get('session')
+  if (!sessionCookie) {
+    return NextResponse.json(
+      { error: 'UNAUTHORIZED', message: 'กรุณาเข้าสู่ระบบ' },
+      { status: 401 }
+    )
+  }
+
+  const payload = verifyToken(sessionCookie.value)
+  if (!payload) {
+    return NextResponse.json(
+      { error: 'INVALID_TOKEN', message: 'Session หมดอายุหรือไม่ถูกต้อง' },
+      { status: 401 }
+    )
+  }
+
   // ถ้าใช้ mock data ไม่ต้องเชื่อม DB
   if (process.env.USE_MOCK_DATA === 'true') {
     return NextResponse.json({
@@ -24,7 +42,6 @@ export async function GET() {
         console.warn('ORACLE_CLIENT_PATH is not set, skipping Oracle Client initialization')
       } else {
         oracledb.initOracleClient({ libDir: oracleClientPath })
-        console.log('Oracle Client initialized in test-db')
       }
     } catch (error) {
       console.error('Failed to initialize Oracle Client:', error)
@@ -36,7 +53,6 @@ export async function GET() {
     const { executeQuery } = await import('@/lib/oracle')
     const result = await executeQuery<{ DUAL_VALUE: string }>(
       'SELECT 1 AS DUAL_VALUE FROM DUAL'
-      //'SELECT ORG_CODE as DUAL_VALUE  FROM hrs.v_gis_raot_office'
     )
 
     return NextResponse.json({

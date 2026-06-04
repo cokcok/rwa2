@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const code = searchParams.get('code')
+    const state = searchParams.get('state')
     const error = searchParams.get('error')
 
     // ถ้า ThaID ส่ง error กลับมา
@@ -19,7 +20,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('ThaID callback code:', code)
+    // ตรวจสอบ OAuth state parameter สำหรับ CSRF protection
+    const savedState = request.cookies.get('oauth_state')?.value
+    if (!state || !savedState || state !== savedState) {
+      return NextResponse.redirect(
+        `${APP_BASE_URL}${withBasePath('/login')}?error=CSRF validation failed`
+      )
+    }
 
     if (!code) {
       return NextResponse.redirect(
@@ -36,12 +43,27 @@ export async function GET(request: NextRequest) {
       // สร้าง JWT token
       const token = signToken(userProfile)
 
-      // Redirect ไป session endpoint บน prog1-test ด้วย token ใน query param
-      // session endpoint จะ set cookie แล้ว redirect ไป /select
-      // ใช้ 302 redirect ไม่ใช่ fetch เพื่อไม่เปิด tab ใหม่บน mobile
-      return NextResponse.redirect(
-        `${APP_BASE_URL}${withBasePath('/api/auth/session')}?token=${encodeURIComponent(token)}`
-      )
+      // ส่ง HTML form auto-submit ไป session endpoint เพื่อ set cookie
+      // ไม่ใช้ redirect ด้วย query param เพื่อป้องกัน token leakage
+      const html = `<!DOCTYPE html>
+<html>
+<head><title>กำลังเข้าสู่ระบบ...</title></head>
+<body>
+<form id="f" method="POST" action="${APP_BASE_URL}${withBasePath('/api/auth/session')}">
+  <input type="hidden" name="token" value="${token.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}" />
+</form>
+<script>document.getElementById('f').submit();</script>
+</body>
+</html>`
+
+      const response = new NextResponse(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      })
+
+      // ลบ oauth_state cookie หลังใช้แล้ว
+      response.cookies.set('oauth_state', '', { maxAge: 0, path: '/', domain: '.raot.co.th' })
+
+      return response
     } catch (err) {
       let errorMessage = 'เกิดข้อผิดพลาดในการยืนยันตัวตน'
 
