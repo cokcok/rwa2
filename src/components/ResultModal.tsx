@@ -35,14 +35,16 @@ export default function ResultModal({
       })
     : ''
 
+  const isSuccessOut = success && actionType === 'OUT'
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
         {/* Header */}
-        <div className={`p-6 text-center ${success ? 'bg-green-50' : 'bg-red-50'}`}>
+        <div className={`p-6 text-center ${success ? (isSuccessOut ? 'bg-red-50' : 'bg-green-50') : 'bg-red-50'}`}>
           {success ? (
             <svg
-              className="w-16 h-16 text-green-500 mx-auto mb-4"
+              className={`w-16 h-16 mx-auto mb-4 ${isSuccessOut ? 'text-red-500' : 'text-green-500'}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -69,7 +71,7 @@ export default function ResultModal({
               />
             </svg>
           )}
-          <h3 className={`text-xl font-semibold ${success ? 'text-green-800' : 'text-red-800'}`}>
+          <h3 className={`text-xl font-semibold ${success ? (isSuccessOut ? 'text-red-800' : 'text-green-800') : 'text-red-800'}`}>
             {success ? `ลงเวลา${actionLabel}สำเร็จ` : `ลงเวลา${actionLabel}ไม่สำเร็จ`}
           </h3>
         </div>
@@ -111,7 +113,7 @@ export default function ResultModal({
 
         {/* Footer */}
         <div className="p-4 bg-gray-50 flex justify-center">
-          <button onClick={onClose} className="btn-primary px-8">
+          <button onClick={onClose} className={`px-8 py-2 rounded-lg text-white font-medium transition-colors ${isSuccessOut ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
             ตกลง
           </button>
         </div>

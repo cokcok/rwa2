@@ -5,9 +5,10 @@ import { useState } from 'react'
 interface AttendanceButtonsProps {
   onCheckin: (actionType: 'IN' | 'OUT') => Promise<void>
   disabled?: boolean
+  fetchingGps?: boolean
 }
 
-export default function AttendanceButtons({ onCheckin, disabled }: AttendanceButtonsProps) {
+export default function AttendanceButtons({ onCheckin, disabled, fetchingGps }: AttendanceButtonsProps) {
   const [loading, setLoading] = useState<'IN' | 'OUT' | null>(null)
 
   const handleClick = async (actionType: 'IN' | 'OUT') => {
@@ -23,10 +24,10 @@ export default function AttendanceButtons({ onCheckin, disabled }: AttendanceBut
     <div className="flex flex-col sm:flex-row gap-4 w-full">
       <button
         onClick={() => handleClick('IN')}
-        disabled={disabled || loading !== null}
+        disabled={disabled || loading !== null || fetchingGps}
         className="flex-1 btn-success flex items-center justify-center gap-2 py-4 text-lg"
       >
-        {loading === 'IN' ? (
+        {(loading === 'IN' || fetchingGps) ? (
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
         ) : (
           <svg
@@ -43,15 +44,15 @@ export default function AttendanceButtons({ onCheckin, disabled }: AttendanceBut
             />
           </svg>
         )}
-        <span>{loading === 'IN' ? 'กำลังลงเวลา...' : 'เข้างาน'}</span>
+        <span>{fetchingGps ? 'กำลังรอพิกัด...' : loading === 'IN' ? 'กำลังลงเวลา...' : 'เข้างาน'}</span>
       </button>
 
       <button
         onClick={() => handleClick('OUT')}
-        disabled={disabled || loading !== null}
+        disabled={disabled || loading !== null || fetchingGps}
         className="flex-1 btn-danger flex items-center justify-center gap-2 py-4 text-lg"
       >
-        {loading === 'OUT' ? (
+        {(loading === 'OUT' || fetchingGps) ? (
           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
         ) : (
           <svg
@@ -68,7 +69,7 @@ export default function AttendanceButtons({ onCheckin, disabled }: AttendanceBut
             />
           </svg>
         )}
-        <span>{loading === 'OUT' ? 'กำลังลงเวลา...' : 'ออกงาน'}</span>
+        <span>{fetchingGps ? 'กำลังรอพิกัด...' : loading === 'OUT' ? 'กำลังลงเวลา...' : 'ออกงาน'}</span>
       </button>
     </div>
   )

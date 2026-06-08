@@ -54,6 +54,7 @@ export default function CheckinPage() {
   const [locationError, setLocationError] = useState('')
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [loadingRecords, setLoadingRecords] = useState(true)
+  const [fetchingGps, setFetchingGps] = useState(false)
   const now = useServerTime()   // server time sync — ป้องกัน client clock manipulation
 
   const skipLocation = useMemo(() => {
@@ -186,6 +187,7 @@ export default function CheckinPage() {
       let lng = userLng
       if (lat === 0 && lng === 0 && navigator.geolocation) {
         try {
+          setFetchingGps(true)
           const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
               enableHighAccuracy: true,
@@ -198,6 +200,8 @@ export default function CheckinPage() {
           setUserLng(lng)
         } catch {
           // ไม่ได้ GPS ส่ง 0 ไป
+        } finally {
+          setFetchingGps(false)
         }
       }
 
@@ -250,10 +254,6 @@ export default function CheckinPage() {
 
   const handleCloseModal = () => {
     setShowModal(false)
-    // ถ้าลงเวลาสำเร็จ กลับไปหน้า select
-    if (modalSuccess) {
-      router.push('/select')
-    }
   }
 
   if (authLoading) {
@@ -311,14 +311,21 @@ export default function CheckinPage() {
           </div>
 
           {/* ปุ่มลงเวลา — แสดงด้านบน กดได้ทันที */}
-          {(skipLocation || (locationVerified && isWithinRange)) && (
+          {(skipLocation || (locationVerified && isWithinRange)) ? (
             <div className="mb-2">
               <AttendanceButtons
                 onCheckin={handleCheckin}
                 disabled={false}
+                fetchingGps={fetchingGps}
               />
             </div>
-          )}
+          ) : !skipLocation && !locationVerified && !locationError ? (
+            <div className="mb-2 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
+              <p className="text-blue-700 font-medium">กำลังตรวจสอบพิกัด...</p>
+              <p className="text-sm text-blue-500 mt-1">กรุณารอสักครู่ ระบบกำลังตรวจสอบตำแหน่งของคุณ</p>
+            </div>
+          ) : null}
 
           {/* แจ้งเตือนอยู่นอกรัศมี — แสดงตำแหน่งเดียวกับปุ่ม */}
           {locationError && (
