@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ThaIDAuthProvider } from '@/lib/auth-provider'
+import { ThaIDAuthProvider, verifyState } from '@/lib/auth-provider'
 import { signToken } from '@/lib/jwt'
 import { APP_BASE_URL, withBasePath } from '@/lib/config'
 
@@ -15,14 +15,15 @@ export async function GET(request: NextRequest) {
     // ถ้า ThaID ส่ง error กลับมา
     if (error) {
       const errorDescription = searchParams.get('error_description') || 'เกิดข้อผิดพลาด'
+      console.error('ThaID callback error from DOPA:', error, errorDescription)
       return NextResponse.redirect(
         `${APP_BASE_URL}${withBasePath('/login')}?error=${encodeURIComponent(errorDescription)}`
       )
     }
 
-    // ตรวจสอบ OAuth state parameter สำหรับ CSRF protection
-    const savedState = request.cookies.get('oauth_state')?.value
-    if (!state || !savedState || state !== savedState) {
+    // ตรวจสอบ CSRF state - ใช้ HMAC-signed state (ไม่ต้องพึ่ง cookie ข้าม domain)
+    if (!state || !verifyState(state)) {
+      console.error('CSRF validation failed. state present:', !!state)
       return NextResponse.redirect(
         `${APP_BASE_URL}${withBasePath('/login')}?error=CSRF validation failed`
       )
@@ -58,18 +59,14 @@ export async function GET(request: NextRequest) {
 </body>
 </html>`
 
-      const response = new NextResponse(html, {
+      return new NextResponse(html, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       })
-
-      // ลบ oauth_state cookie หลังใช้แล้ว
-      response.cookies.set('oauth_state', '', { maxAge: 0, path: '/', domain: '.raot.co.th' })
-
-      return response
     } catch (err) {
       let errorMessage = 'เกิดข้อผิดพลาดในการยืนยันตัวตน'
 
       if (err instanceof Error) {
+        console.error('ThaID callback handler error:', err.message)
         switch (err.message) {
           case 'NOT_FOUND':
             errorMessage = 'ไม่พบข้อมูลในระบบ HR'

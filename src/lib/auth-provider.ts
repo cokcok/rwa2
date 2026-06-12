@@ -1,6 +1,24 @@
+import crypto from 'crypto'
 import { executeQuery } from './oracle'
 import { mockEmployees } from './mock-data'
 import type { AuthProvider, UserProfile, HrEmployee } from '@/types'
+
+// HMAC key สำหรับ sign state parameter (CSRF protection แบบ cross-domain)
+const HMAC_SECRET = process.env.JWT_SECRET || 'dev-secret-key-for-testing-only'
+
+export function signState(state: string): string {
+  const hmac = crypto.createHmac('sha256', HMAC_SECRET).update(state).digest('hex')
+  return `${state}.${hmac}`
+}
+
+export function verifyState(signedState: string): boolean {
+  const idx = signedState.lastIndexOf('.')
+  if (idx === -1) return false
+  const state = signedState.substring(0, idx)
+  const receivedHmac = signedState.substring(idx + 1)
+  const expectedHmac = crypto.createHmac('sha256', HMAC_SECRET).update(state).digest('hex')
+  return crypto.timingSafeEqual(Buffer.from(receivedHmac, 'hex'), Buffer.from(expectedHmac, 'hex'))
+}
 
 // Mock AuthProvider สำหรับ development
 export class MockAuthProvider implements AuthProvider {
@@ -80,8 +98,10 @@ export class ThaIDAuthProvider implements AuthProvider {
   }
 
   getAuthUrl(): string {
-    // สร้าง random state สำหรับ CSRF protection
-    const state = crypto.randomUUID()
+    // สร้าง random state สำหรับ CSRF protection (signed ด้วย HMAC)
+    // ใช้ signed state แทน cookie เพื่อให้ข้าม subdomain ได้ (api.raot.co.th ↔ prog1-test.raot.co.th)
+    const rawState = crypto.randomUUID()
+    const state = signState(rawState)
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,

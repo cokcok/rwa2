@@ -5,7 +5,7 @@ const nextConfig = {
     path: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/_next/image`,
   },
   experimental: {
-    serverComponentsExternalPackages: ['oracledb'],
+    serverComponentsExternalPackages: ['oracledb', 'exceljs'],
   },
 };
 

@@ -7,7 +7,7 @@ const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ''
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-this'
 
 // Routes ที่ต้องการ authentication
-const protectedRoutes = ['/select', '/checkin']
+const protectedRoutes = ['/select', '/checkin', '/report']
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

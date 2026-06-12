@@ -4,7 +4,6 @@ import { APP_BASE_URL, withBasePath } from '@/lib/config'
 
 // POST /api/auth/session
 // รับ JWT token แล้ว set cookie (ใช้กับ cross-domain ThaID callback)
-// รับ token จาก form body เท่านั้น (ไม่รับ query param เพื่อป้องกัน token leakage)
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -24,13 +23,22 @@ export async function POST(request: NextRequest) {
 async function setSessionAndRedirect(token: string) {
   const payload = verifyToken(token)
   if (!payload) {
+    console.error('Session: JWT verification failed')
     return NextResponse.redirect(`${APP_BASE_URL}${withBasePath('/login')}?error=token ไม่ถูกต้อง`)
   }
 
-  const response = NextResponse.redirect(`${APP_BASE_URL}${withBasePath('/select')}`)
-  response.headers.set('Set-Cookie',
-    `session=${token}; HttpOnly; SameSite=Strict; Path=/; Secure`
-  )
+  const redirectUrl = `${APP_BASE_URL}${withBasePath('/select')}`
+
+  const response = NextResponse.redirect(redirectUrl)
+
+  // ตั้ง session cookie พร้อม domain ชัดเจนสำหรับ cross-domain flow
+  response.cookies.set('session', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 30 * 60, // 30 นาที
+  })
 
   return response
 }
