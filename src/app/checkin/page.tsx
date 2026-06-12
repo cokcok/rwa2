@@ -11,6 +11,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { CHECKIN_TYPES, getTypeColorClasses } from '@/config/checkin-types'
 import type { CheckinType } from '@/config/checkin-types'
 import type { OfficeLocation } from '@/types'
+import { withBasePath } from '@/lib/config'
 
 interface TodayRecord {
   log_id: number
@@ -451,14 +452,24 @@ export default function CheckinPage() {
           </div>
         )}
 
-        {/* ปุ่มกลับ */}
-        <div className="text-center">
+        {/* ปุ่มกลับ + รายงาน */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={() => router.push('/select')}
             className="btn-secondary"
           >
             กลับไปเลือกประเภท
           </button>
+          {/* ปุ่มดูรายงาน - ปิดไว้ชั่วคราว */}
+          {/* <a
+            href={withBasePath('/report')}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            ดูรายงาน
+          </a> */}
         </div>
 
       </div>
