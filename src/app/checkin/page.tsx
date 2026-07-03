@@ -11,7 +11,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'
 import { CHECKIN_TYPES, getTypeColorClasses } from '@/config/checkin-types'
 import type { CheckinType } from '@/config/checkin-types'
 import type { OfficeLocation } from '@/types'
-import { withBasePath } from '@/lib/config'
+//import { withBasePath } from '@/lib/config'
 
 interface TodayRecord {
   log_id: number

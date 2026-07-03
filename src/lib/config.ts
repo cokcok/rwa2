@@ -3,7 +3,7 @@
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
 // URL สำหรับ redirect กลับจาก callback (DOPA → api.raot.co.th → prog1-test)
-export const APP_BASE_URL = process.env.APP_BASE_URL || 'https://prog1-test.raot.co.th'
+export const APP_BASE_URL = process.env.APP_BASE_URL || 'https://worktime.raot.co.th'
 
 // Helper สร้าง path ด้วย base path prefix
 export function withBasePath(path: string): string {

@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       // Query จาก Oracle DB
       const sql = `
         SELECT LOGTIME, NODEID, CHECKTYPE, DEPT_ID, KM
-        FROM FSS.RWA_MAIN_DEV
+        FROM FSS.RWA_MAIN
         WHERE EMP_CODE = :emp_code
           AND TRUNC(LOGTIME) BETWEEN TO_DATE(:start_date, 'YYYY-MM-DD')
                                   AND TO_DATE(:end_date, 'YYYY-MM-DD')

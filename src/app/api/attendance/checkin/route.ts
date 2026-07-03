@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
 
     // ---- INSERT เข้า RWA_MAIN ----
     const insertSql = `
-      INSERT INTO FSS.RWA_MAIN_DEV (
+      INSERT INTO FSS.RWA_MAIN (
         ID, EMP_CODE, LOGTIME, NODEID, DEPT_ID,
         LAT_WGS84, LON_WGS84,
         BROWSER, BROWSER_VERSION, DEVICE, OS, OS_VERSION, USERAGENT,

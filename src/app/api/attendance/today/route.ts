@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       SELECT ID as LOG_ID,
              CASE WHEN NODEID = 1 THEN 'IN' ELSE 'OUT' END as ACTION_TYPE,
              LOGTIME as ACTION_TIME
-      FROM FSS.RWA_MAIN_DEV
+      FROM FSS.RWA_MAIN
       WHERE EMP_CODE = :emp_id
         AND TRUNC(LOGTIME) = TRUNC(SYSDATE)
       ORDER BY LOGTIME ASC
