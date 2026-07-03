@@ -56,6 +56,7 @@ export default function CheckinPage() {
   const [todayRecords, setTodayRecords] = useState<TodayRecord[]>([])
   const [loadingRecords, setLoadingRecords] = useState(true)
   const [fetchingGps, setFetchingGps] = useState(false)
+  const [clientIp, setClientIp] = useState('')
   const now = useServerTime()   // server time sync — ป้องกัน client clock manipulation
 
   const skipLocation = useMemo(() => {
@@ -103,6 +104,17 @@ export default function CheckinPage() {
       })
     }
   }, [router])
+
+  // fetch client IP ที่ server จะบันทึกลง DB
+  useEffect(() => {
+    const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
+    fetch(`${bp}/api/attendance/client-ip`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.client_ip) setClientIp(data.client_ip)
+      })
+      .catch(() => { /* ไม่เป็นไร */ })
+  }, [])
 
   const fetchTodayRecords = useCallback(async () => {
     try {
@@ -363,6 +375,10 @@ export default function CheckinPage() {
               } ${getTypeColorClasses(CHECKIN_TYPES[checkinType]?.color || 'blue').iconText}`}>
                 {checkinType}
               </span>
+            </div>
+            <div className="flex justify-between items-center py-2 border-b border-gray-100">
+              <span className="text-gray-600">IP:</span>
+              <span className="font-mono text-sm text-gray-500">{clientIp || '...'}</span>
             </div>
 
             {/* ข้อมูลการลงเวลาวันนี้ */}
