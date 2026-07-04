@@ -57,6 +57,8 @@ export default function CheckinPage() {
   const [loadingRecords, setLoadingRecords] = useState(true)
   const [fetchingGps, setFetchingGps] = useState(false)
   const [clientIp, setClientIp] = useState('')
+  const [ipInRange, setIpInRange] = useState<boolean | null>(null)
+  const [checkingIp, setCheckingIp] = useState(true)
   const now = useServerTime()   // server time sync — ป้องกัน client clock manipulation
 
   const skipLocation = useMemo(() => {
@@ -105,16 +107,19 @@ export default function CheckinPage() {
     }
   }, [router])
 
-  // fetch client IP ที่ server จะบันทึกลง DB
+  // fetch client IP + เช็ค IP range ถ้ามี orgCode แล้ว
   useEffect(() => {
+    if (!orgCode) return
     const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
-    fetch(`${bp}/api/attendance/client-ip`)
+    fetch(`${bp}/api/attendance/client-ip?org_code=${orgCode}`)
       .then(res => res.json())
       .then(data => {
         if (data.client_ip) setClientIp(data.client_ip)
+        setIpInRange(data.ip_in_range ?? false)
       })
-      .catch(() => { /* ไม่เป็นไร */ })
-  }, [])
+      .catch(() => { setIpInRange(false) })
+      .finally(() => setCheckingIp(false))
+  }, [orgCode])
 
   const fetchTodayRecords = useCallback(async () => {
     try {
@@ -137,7 +142,7 @@ export default function CheckinPage() {
   }, [fetchTodayRecords])
 
   useEffect(() => {
-    if (skipLocation) {
+    if (skipLocation || ipInRange === true) {
       setLocationVerified(true)
       setIsWithinRange(true)
       // ดึง GPS เก็บไว้ (ไม่เช็คระยะ)
@@ -152,7 +157,7 @@ export default function CheckinPage() {
         )
       }
     }
-  }, [skipLocation])
+  }, [skipLocation, ipInRange])
 
   // [ลบ inline clock sync] — ย้ายไปใช้ useServerTime hook แทน
   // hook จัดการ: initial sync + tick ทุก 1 วิ + re-sync ทุก 60 วิ + cleanup
@@ -235,6 +240,8 @@ export default function CheckinPage() {
       })
 
       const data = await response.json()
+
+      if (data.debug) console.log('[CHECKIN_DEBUG]', data.debug)
 
       if (response.ok) {
         setModalSuccess(true)
@@ -324,7 +331,7 @@ export default function CheckinPage() {
           </div>
 
           {/* ปุ่มลงเวลา — แสดงด้านบน กดได้ทันที */}
-          {(skipLocation || (locationVerified && isWithinRange)) ? (
+          {(skipLocation || ipInRange === true || (locationVerified && isWithinRange)) ? (
             <div className="mb-2">
               <AttendanceButtons
                 onCheckin={handleCheckin}
@@ -332,7 +339,13 @@ export default function CheckinPage() {
                 fetchingGps={fetchingGps}
               />
             </div>
-          ) : !skipLocation && !locationVerified && !locationError ? (
+          ) : checkingIp ? (
+            <div className="mb-2 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
+              <p className="text-blue-700 font-medium">กำลังตรวจสอบ IP...</p>
+              <p className="text-sm text-blue-500 mt-1">กรุณารอสักครู่</p>
+            </div>
+          ) : !locationVerified && !locationError ? (
             <div className="mb-2 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
               <p className="text-blue-700 font-medium">กำลังตรวจสอบพิกัด...</p>
@@ -378,7 +391,15 @@ export default function CheckinPage() {
             </div>
             <div className="flex justify-between items-center py-2 border-b border-gray-100">
               <span className="text-gray-600">IP:</span>
-              <span className="font-mono text-sm text-gray-500">{clientIp || '...'}</span>
+              <div className="text-right">
+                <span className="font-mono text-sm text-gray-500 block">{clientIp || '...'}</span>
+                {ipInRange === true && (
+                  <span className="text-xs text-green-600 font-medium">✓ อยู่ในวงสำนักงาน</span>
+                )}
+                {ipInRange === false && (
+                  <span className="text-xs text-orange-500">IP ไม่อยู่ในวงสำนักงาน</span>
+                )}
+              </div>
             </div>
 
             {/* ข้อมูลการลงเวลาวันนี้ */}
@@ -421,7 +442,7 @@ export default function CheckinPage() {
         </div>
 
         {/* พิกัดสำนักงาน + ตรวจสอบตำแหน่ง */}
-        {!skipLocation && office && (
+        {!skipLocation && ipInRange !== true && office && (
           <div className="card mb-6 border-blue-200 bg-blue-50">
             <h3 className="text-lg font-semibold text-blue-800 mb-3 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
