@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { checkin_type, checkin_org_code, action_type, user_lat, user_lng, client_timestamp } = body
+    const clientIp = getClientIp(request)
+    let ipRangesCount = 0
 
     // ตรวจสอบว่าเวลาเครื่อง client ห่างจาก server เกินกำหนดหรือไม่
     if (client_timestamp) {
@@ -108,7 +110,8 @@ export async function POST(request: NextRequest) {
             {
               error: 'OUT_OF_RANGE',
               message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
-              distance_meter: distance
+              distance_meter: distance,
+              debug: { clientIp, dept_id: checkin_org_code, ipRanges_count: ipRangesCount, skipLocationCheck }
             },
             { status: 400 }
           )
@@ -127,21 +130,21 @@ export async function POST(request: NextRequest) {
         success: true,
         log_id: mockAttendanceLogs.length,
         action_time: newLog.action_time.toISOString(),
-        distance_meter: distance
+        distance_meter: distance,
+        debug: { clientIp, dept_id: checkin_org_code, ipRanges_count: 0, skipLocationCheck: true }
       })
     }
 
     // Real Oracle DB mode
-    const clientIp = getClientIp(request)
     let skipLocationCheck = CHECKIN_TYPES[checkin_type as CheckinType]?.skipLocationCheck || false
     let office_lat = 0
     let office_lng = 0
     let distance = 0
 
     // ตรวจสอบ IP ว่าอยู่ในวงสำนักงานหรือไม่ (ถ้าใช่ ข้ามการเช็คพิกัด)
-    // ใช้ cache 10 ชม. (IP ranges ไม่ค่อยเปลี่ยน)
     if (!skipLocationCheck && clientIp) {
       const ipCacheKey = `ip_range_${checkin_org_code}`
+
       let ipRanges = getCached<{ IP_RANGE1: string; IP_RANGE2: string }[]>(ipCacheKey)
 
       if (!ipRanges) {
@@ -155,8 +158,12 @@ export async function POST(request: NextRequest) {
           ipRangeSql,
           { dept_id: checkin_org_code }
         )
-        setCache(ipCacheKey, ipRanges, 10 * 60 * 60 * 1000) // cache 10 ชม.
+        if (ipRanges.length > 0) {
+          setCache(ipCacheKey, ipRanges, 10 * 60 * 60 * 1000)
+        }
       }
+
+      ipRangesCount = ipRanges.length
 
       for (const range of ipRanges) {
         if (range.IP_RANGE1 && range.IP_RANGE2 && isIpInRange(clientIp, range.IP_RANGE1, range.IP_RANGE2)) {
@@ -202,7 +209,8 @@ export async function POST(request: NextRequest) {
           {
             error: 'OUT_OF_RANGE',
             message: `คุณอยู่ห่างจากสำนักงาน ${distance.toFixed(1)} เมตร (ต้องไม่เกิน ${maxDistance} เมตร)`,
-            distance_meter: distance
+            distance_meter: distance,
+            debug: { clientIp, dept_id: checkin_org_code, ipRanges_count: ipRangesCount, skipLocationCheck }
           },
           { status: 400 }
         )
@@ -309,7 +317,8 @@ export async function POST(request: NextRequest) {
       success: true,
       log_id: outBinds.id[0],       // RWA_MAIN.ID
       action_time: outBinds.logtime[0].toISOString(),  // RWA_MAIN.LOGTIME
-      distance_meter: distance
+      distance_meter: distance,
+      debug: { clientIp, dept_id: checkin_org_code, ipRanges_count: ipRangesCount, skipLocationCheck }
     })
   } catch (error) {
     console.error('Checkin error:', error)

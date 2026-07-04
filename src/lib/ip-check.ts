@@ -8,7 +8,7 @@ function ipToNumber(ip: string): number {
   if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
     return -1 // invalid IP
   }
-  return (parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3]
+  return ((parts[0] * 256 + parts[1]) * 256 + parts[2]) * 256 + parts[3]
 }
 
 // ตรวจสอบว่า IP อยู่ในช่วง start-end หรือไม่
