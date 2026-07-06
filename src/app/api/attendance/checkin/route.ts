@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
           SELECT IP_RANGE1, IP_RANGE2
           FROM FSS.IPADDRESS_DEPT
           WHERE DEPT_ID = :dept_id
-            AND CANCEL_FLG != '1'
+            AND (CANCEL_FLG IS NULL OR CANCEL_FLG != '1')
         `
         ipRanges = await executeQuery<{ IP_RANGE1: string; IP_RANGE2: string }>(
           ipRangeSql,
