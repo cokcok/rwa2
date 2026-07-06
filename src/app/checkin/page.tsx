@@ -151,6 +151,7 @@ export default function CheckinPage() {
     if (skipLocation || ipInRange === true) {
       setLocationVerified(true)
       setIsWithinRange(true)
+      setLocationError('')
       // ดึง GPS เก็บไว้ (ไม่เช็คระยะ)
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -360,7 +361,7 @@ export default function CheckinPage() {
           ) : null}
 
           {/* แจ้งเตือนอยู่นอกรัศมี — แสดงตำแหน่งเดียวกับปุ่ม */}
-          {locationError && (
+          {locationError && ipInRange !== true && (
             <div className="mb-2 p-4 bg-red-50 border border-red-200 rounded-lg text-center">
               <div className="flex items-center justify-center gap-2 text-red-700 font-medium">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
