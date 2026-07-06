@@ -116,6 +116,12 @@ export default function CheckinPage() {
       .then(data => {
         if (data.client_ip) setClientIp(data.client_ip)
         setIpInRange(data.ip_in_range ?? false)
+        console.log('[CHECKIN_DEBUG]', {
+          clientIp: data.client_ip,
+          dept_id: orgCode,
+          ip_in_range: data.ip_in_range,
+          ip_ranges_count: data.ip_ranges_count,
+        })
       })
       .catch(() => { setIpInRange(false) })
       .finally(() => setCheckingIp(false))
