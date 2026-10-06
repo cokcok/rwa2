@@ -205,6 +205,11 @@ export default function CheckinPage() {
     }
   }
 
+  // เคลียร์ error เดิมตอนกด "ลองใหม่" เพื่อไม่ให้ banner สีแดงค้างระหว่างรอ GPS
+  const handleLocationRetry = () => {
+    setLocationError('')
+  }
+
   const handleCheckin = async (actionType: 'IN' | 'OUT') => {
     try {
       // ถ้ายังไม่ได้ GPS ให้ดึงตอนนี้เลย
@@ -490,6 +495,7 @@ export default function CheckinPage() {
                 onVerified={handleLocationVerified}
                 onError={handleLocationError}
                 onLocationObtained={handleLocationObtained}
+                onRetry={handleLocationRetry}
                 hideRangeError={true}
               />
             </div>
