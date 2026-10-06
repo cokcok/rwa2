@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import IdleLogout from "@/components/IdleLogout";
+import { APP_VERSION } from "@/lib/version";
 
 import "./globals.css";
 
@@ -65,8 +66,12 @@ export default function RootLayout({
 
         {/* Footer */}
         <footer className="text-center py-4 text-sm text-green-800 bg-gradient-to-r from-yellow-300 via-yellow-200 to-green-200 border-t border-yellow-300 mt-4">
-          <p>ระบบลงเวลาทำงาน RAOT &copy; {new Date().getFullYear()}</p>
-          <p className="mt-1 font-medium text-gray-700">แจ้งปัญหาการใช้งานระบบ 123..</p>
+          <p>
+            ระบบลงเวลาทำงาน RAOT &copy; {new Date().getFullYear()} · เวอร์ชัน {APP_VERSION}
+          </p>
+          <p className="mt-1 font-medium text-gray-700">
+            แจ้งปัญหาการใช้งานระบบ ฝทส. 12321 ปัญหาเกี่ยวกับข้อมูลทะเบียนประวัติ ฝทม. 10510
+          </p>
         </footer>
       </body>
     </html>
