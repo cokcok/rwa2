@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { calculateDistance, formatDistance } from '@/lib/geolocation'
 import type { OfficeLocation } from '@/types'
 
@@ -9,10 +9,11 @@ interface LocationVerifierProps {
   onVerified: (userLat: number, userLng: number, distance: number) => void
   onError: (error: string) => void
   onLocationObtained?: (userLat: number, userLng: number, distance: number) => void
+  onRetry?: () => void
   hideRangeError?: boolean
 }
 
-export default function LocationVerifier({ office, onVerified, onError, onLocationObtained, hideRangeError }: LocationVerifierProps) {
+export default function LocationVerifier({ office, onVerified, onError, onLocationObtained, onRetry, hideRangeError }: LocationVerifierProps) {
   const maxDistance = parseFloat(process.env.NEXT_PUBLIC_MAX_DISTANCE_METERS || '50')
 
   const [loading, setLoading] = useState(true)
@@ -20,14 +21,59 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
   const [isOutOfRange, setIsOutOfRange] = useState(false)
   const [distance, setDistance] = useState<number | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    let status: PermissionStatus | null = null
+
+    // ถ้าผู้ใช้เปลี่ยนสิทธิ์ location ระหว่างเปิดหน้า (ปลดบล็อกผ่าน padlock/ตั้งค่า)
+    // ให้ดึงพิกัดใหม่ทันที โดยไม่ต้องกด "ลองใหม่" หรือรีเฟรชหน้า
+    const handlePermissionChange = () => {
+      if (!cancelled && status && status.state === 'granted') {
+        verifyLocation()
+      }
+    }
+
     verifyLocation()
+
+    if (typeof navigator.permissions !== 'undefined') {
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((s) => {
+          if (cancelled) return
+          status = s
+          s.addEventListener('change', handlePermissionChange)
+        })
+        .catch(() => { /* Permissions API ไม่รองรับในเบราว์เซอร์นี้ */ })
+    }
+
+    return () => {
+      cancelled = true
+      if (status) status.removeEventListener('change', handlePermissionChange)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const verifyLocation = () => {
+  const getPermissionHint = () => {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+    if (/android/i.test(ua)) {
+      return ' เปิดสิทธิ์ที่ ไอคอนรูปล็อกบนแถบที่อยู่ → ตำแหน่ง → อนุญาต'
+    }
+    if (/iphone|ipad|ipod/i.test(ua)) {
+      return ' เปิดสิทธิ์ที่ การตั้งค่า → Safari → เว็บไซต์ → ตำแหน่ง → อนุญาต'
+    }
+    return ' เปิดสิทธิ์ที่ ไอคอนรูปล็อกบนแถบที่อยู่ → สิทธิ์ → ตำแหน่ง → อนุญาต'
+  }
+
+  const verifyLocation = (useHighAccuracy = true) => {
     setLoading(true)
     setError('')
+    setIsOutOfRange(false)
+    setUserLocation(null)
+    setDistance(null)
+    onRetry?.()
 
     if (!navigator.geolocation) {
       setError('เบราว์เซอร์ไม่รองรับการระบุตำแหน่ง')
@@ -36,12 +82,15 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
       return
     }
 
-    // ใช้ setTimeout 10 วินาที (แก้จาก requestAnimationFrame ที่ไม่ถูกต้อง)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+
+    // ใช้ setTimeout 20 วินาที (แก้จาก requestAnimationFrame ที่ไม่ถูกต้อง)
     const timeout = setTimeout(() => {
       setError('หมดเวลาในการระบุตำแหน่ง กรุณาลองใหม่')
-      onError('GEOLOCATION_TIMEOUT')
+      onError('หมดเวลาในการระบุตำแหน่ง กรุณาลองใหม่')
       setLoading(false)
-    }, 10000)
+    }, 20000)
+    timeoutRef.current = timeout
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -71,11 +120,19 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
       },
       (err) => {
         clearTimeout(timeout)
+        console.error('[GEOLOCATION_ERROR]', { code: err.code, message: err.message, useHighAccuracy })
+
+        // GPS ความแม่นยำสูง timeout → ลองใหม่แบบไม่เร่งความแม่น (มือถือในร่มมัก fix ไม่ทัน)
+        if (err.code === err.TIMEOUT && useHighAccuracy) {
+          verifyLocation(false)
+          return
+        }
+
         let errorMessage = 'ไม่สามารถระบุตำแหน่งได้'
 
         switch (err.code) {
           case err.PERMISSION_DENIED:
-            errorMessage = 'กรุณาอนุญาตให้เข้าถึงตำแหน่งในเบราว์เซอร์'
+            errorMessage = `กรุณาอนุญาตให้เข้าถึงตำแหน่งในเบราว์เซอร์${getPermissionHint()}`
             break
           case err.POSITION_UNAVAILABLE:
             errorMessage = 'ไม่สามารถระบุตำแหน่งได้ กรุณาตรวจสอบ GPS'
@@ -90,9 +147,9 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
         setLoading(false)
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        enableHighAccuracy: useHighAccuracy,
+        timeout: 20000,
+        maximumAge: 30000
       }
     )
   }
@@ -202,7 +259,7 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
 
         {/* ปุ่มลองใหม่ (เมื่ออยู่นอกพื้นที่) */}
         {error && (
-          <button onClick={verifyLocation} className="btn-primary w-full mt-3">
+          <button onClick={() => verifyLocation()} className="btn-primary w-full mt-3">
             ลองใหม่
           </button>
         )}
@@ -228,7 +285,7 @@ export default function LocationVerifier({ office, onVerified, onError, onLocati
           />
         </svg>
         <p className="text-red-600 font-medium mb-4">{error}</p>
-        <button onClick={verifyLocation} className="btn-primary">
+        <button onClick={() => verifyLocation()} className="btn-primary">
           ลองใหม่
         </button>
       </div>
