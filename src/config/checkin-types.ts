@@ -13,6 +13,8 @@
  *   iconPath            - SVG path สำหรับ Heroicons
  *   requiresOfficeSelect - ต้องเลือกสำนักงานเอง (true) หรือใช้สังกัดตัวเอง (false)
  *   skipLocationCheck   - ข้ามการตรวจสอบ GPS (เช่น WFH ไม่ต้องอยู่ที่สำนักงาน)
+ *   autoProceed         - คลิก type แล้วไปหน้าถัดไปทันที ไม่ต้องกด "ดำเนินการต่อ"
+ *                         (ใช้ได้เมื่อ requiresOfficeSelect = false)
  *   enabled             - เปิด/ปิดการแสดงประเภทนี้ในหน้าเลือก
  */
 export const CHECKIN_TYPES = {
@@ -23,6 +25,7 @@ export const CHECKIN_TYPES = {
     iconPath: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
     requiresOfficeSelect: false,
     skipLocationCheck: false,
+    autoProceed: true,
     enabled: true,
   },
   SUPPORT: {
@@ -32,6 +35,7 @@ export const CHECKIN_TYPES = {
     iconPath: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
     requiresOfficeSelect: true,
     skipLocationCheck: false,
+    autoProceed: false,
     enabled: true,
   },
   WFH: {
@@ -41,7 +45,8 @@ export const CHECKIN_TYPES = {
     iconPath: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6',
     requiresOfficeSelect: false,
     skipLocationCheck: true,
-    enabled: true, // ปิดไว้ก่อน รอให้มีนโยบาย WFH ชัดเจนกว่านี้
+    autoProceed: true,
+    enabled: false, // ปิดไว้ก่อน รอให้มีนโยบาย WFH ชัดเจนกว่านี้
   },
 } as const
 

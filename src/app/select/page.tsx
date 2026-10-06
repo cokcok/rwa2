@@ -27,6 +27,12 @@ export default function SelectPage() {
     setError('')
     setSelectedOrgCode('')
     setSelectedOffice(null)
+
+    // กำหนดจาก src/config/checkin-types.ts → autoProceed
+    // (type ต้องส่งเป็น argument เพราะ setState ยังไม่อัปเดตในรอบเดียวกัน)
+    if (CHECKIN_TYPES[type].autoProceed && !CHECKIN_TYPES[type].requiresOfficeSelect) {
+      void proceedWith(type)
+    }
   }
 
   const handleOfficeSelect = (orgCode: string, office: OfficeLocation | null) => {
@@ -35,17 +41,16 @@ export default function SelectPage() {
     setError('')
   }
 
-  const handleProceed = async () => {
-    if (!selectedType) return
+  const proceedWith = async (type: CheckinType, orgCode?: string, office?: OfficeLocation | null) => {
     setError('')
     setLoading(true)
 
-    const typeConfig = CHECKIN_TYPES[selectedType]
+    const typeConfig = CHECKIN_TYPES[type]
 
     try {
       if (typeConfig.skipLocationCheck) {
         // ไม่ต้องเช็คพิกัด (เช่น WFH)
-        sessionStorage.setItem('checkin_type', selectedType)
+        sessionStorage.setItem('checkin_type', type)
         sessionStorage.setItem('checkin_org_code', user?.org_code || '')
         sessionStorage.setItem('checkin_org_name', user?.org_name || '')
         sessionStorage.removeItem('office_lat')
@@ -65,7 +70,7 @@ export default function SelectPage() {
         const officeData = await response.json()
         setSelectedOffice(officeData)
 
-        sessionStorage.setItem('checkin_type', selectedType)
+        sessionStorage.setItem('checkin_type', type)
         sessionStorage.setItem('checkin_org_code', user?.org_code || '')
         sessionStorage.setItem('checkin_org_name', user?.org_name || '')
         sessionStorage.setItem('office_lat', officeData.latitude.toString())
@@ -73,19 +78,19 @@ export default function SelectPage() {
 
         router.push('/checkin')
       } else {
-        if (!selectedOrgCode || !selectedOffice) {
+        if (!orgCode || !office) {
           setError('กรุณาเลือกสังกัด')
           return
         }
 
-        let officeLat = selectedOffice.latitude
-        let officeLng = selectedOffice.longitude
+        let officeLat = office.latitude
+        let officeLng = office.longitude
 
         // ถ้าหน่วยงานไม่มีพิกัด (เช่น หน่วยงานเพิ่มเติมจาก env) ให้ดึงจาก API
         if (officeLat === 0 && officeLng === 0) {
           try {
             const bp = process.env.NEXT_PUBLIC_BASE_PATH || ''
-            const officeRes = await fetch(`${bp}/api/offices/${selectedOrgCode}`)
+            const officeRes = await fetch(`${bp}/api/offices/${orgCode}`)
             if (officeRes.ok) {
               const officeData = await officeRes.json()
               officeLat = officeData.latitude
@@ -96,9 +101,9 @@ export default function SelectPage() {
           }
         }
 
-        sessionStorage.setItem('checkin_type', selectedType)
-        sessionStorage.setItem('checkin_org_code', selectedOrgCode)
-        sessionStorage.setItem('checkin_org_name', selectedOffice.org_name)
+        sessionStorage.setItem('checkin_type', type)
+        sessionStorage.setItem('checkin_org_code', orgCode)
+        sessionStorage.setItem('checkin_org_name', office.org_name)
         sessionStorage.setItem('office_lat', officeLat.toString())
         sessionStorage.setItem('office_lng', officeLng.toString())
 
@@ -110,6 +115,11 @@ export default function SelectPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleProceed = () => {
+    if (!selectedType) return
+    void proceedWith(selectedType, selectedOrgCode, selectedOffice)
   }
 
   if (authLoading) {
@@ -155,7 +165,8 @@ export default function SelectPage() {
               <button
                 key={key}
                 onClick={() => handleTypeSelect(key)}
-                className={`card cursor-pointer transition-all hover:shadow-lg ${
+                disabled={loading}
+                className={`card transition-all hover:shadow-lg ${loading ? 'opacity-60 cursor-wait' : 'cursor-pointer'} ${
                   selectedType === key
                     ? `ring-2 ${colors.ring} ${colors.bg}`
                     : 'hover:bg-gray-50'
