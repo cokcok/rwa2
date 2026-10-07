@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import oracledb from '@/lib/oracle-init'
 import { verifyToken } from '@/lib/jwt'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/test-oracle
 // ทดสอบ Oracle Client initialization (ต้อง login ก่อน)
 export async function GET(request: NextRequest) {

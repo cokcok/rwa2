@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { ThaIDAuthProvider } from '@/lib/auth-provider'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/auth/thaid
 // ส่ง ThaID authorization URL กลับให้ frontend
 // CSRF protection ทำผ่าน HMAC-signed state parameter (ไม่ต้องใช้ cookie)

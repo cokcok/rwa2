@@ -5,6 +5,8 @@ import { executeQuery } from '@/lib/oracle'
 import { getCached, setCache } from '@/lib/cache'
 import { isIpInRange } from '@/lib/ip-check'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   const sessionCookie = request.cookies.get('session')
   if (!sessionCookie) {
