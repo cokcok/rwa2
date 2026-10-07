@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import oracledb from '@/lib/oracle-init'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/test-db
 // ทดสอบการเชื่อมต่อ Oracle DB (ไม่ต้อง login)
 export async function GET() {

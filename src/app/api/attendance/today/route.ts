@@ -3,6 +3,7 @@ import { executeQuery } from '@/lib/oracle'
 import { verifyToken } from '@/lib/jwt'
 import { mockAttendanceLogs } from '@/lib/mock-data'
 
+export const dynamic = 'force-dynamic'
 
 // GET /api/attendance/today
 // ดึงข้อมูลลงเวลาของวันนี้สำหรับผู้ใช้ปัจจุบัน

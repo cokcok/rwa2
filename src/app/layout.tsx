@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import IdleLogout from "@/components/IdleLogout";
 import { APP_VERSION } from "@/lib/version";
@@ -19,16 +19,17 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "RAOT - ระบบลงเวลาทำงาน",
   description: "RAOT - ระบบลงเวลาทำงาน",
-  themeColor: "#2563eb",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   icons: {
     icon: `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/icon.svg`,
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

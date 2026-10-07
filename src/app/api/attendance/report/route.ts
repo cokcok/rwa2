@@ -5,6 +5,8 @@ import { generatePdfBuffer } from '@/lib/pdf-generator'
 import { generateExcelBuffer } from '@/lib/excel-generator'
 import type { ReportRecord } from '@/lib/pdf-generator'
 
+export const dynamic = 'force-dynamic'
+
 // Mock data สำหรับรายงาน
 const mockReportRecords: ReportRecord[] = [
   { LOGTIME: new Date('2026-06-01T08:25:00+07:00'), NODEID: 1, CHECKTYPE: '0', DEPT_ID: 'DEPT001', KM: '0.025' },

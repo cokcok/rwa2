@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/jwt'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/auth/me
 // ดึงข้อมูลผู้ใช้จาก JWT cookie
 export async function GET(request: NextRequest) {

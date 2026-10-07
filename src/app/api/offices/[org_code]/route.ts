@@ -5,6 +5,8 @@ import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { mockOffices } from '@/lib/mock-data'
 import type { GisOffice, OfficeLocation } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/offices/[org_code]
 // ดึงพิกัดสำนักงานตาม org_code
 export async function GET(

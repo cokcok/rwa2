@@ -5,6 +5,8 @@ import { rateLimitMiddleware } from '@/lib/rate-limit'
 import { mockOffices } from '@/lib/mock-data'
 import type { GisOffice, OfficeLocation } from '@/types'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/offices
 // ดึงรายชื่อสังกัดทั้งหมดจาก GIS (สำหรับ Dropdown "ช่วยปฏิบัติงาน")
 export async function GET(request: NextRequest) {

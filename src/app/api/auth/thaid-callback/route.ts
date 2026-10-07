@@ -3,6 +3,8 @@ import { ThaIDAuthProvider, verifyState } from '@/lib/auth-provider'
 import { signToken } from '@/lib/jwt'
 import { APP_BASE_URL, withBasePath } from '@/lib/config'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/auth/thaid-callback
 // ThaID OAuth2 callback - รับ code จาก DOPA แลกเป็น token
 export async function GET(request: NextRequest) {
