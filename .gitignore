@@ -19,6 +19,7 @@
 # misc
 .DS_Store
 *.pem
+DEPLOY_PRODUCTION.md
 
 # debug
 npm-debug.log*
