@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { executeQuery } from './oracle'
 import { mockEmployees } from './mock-data'
 import type { AuthProvider, UserProfile, HrEmployee } from '@/types'
+import { selectHrEmployee } from '@/types'
 
 // HMAC key สำหรับ sign state parameter (CSRF protection แบบ cross-domain)
 const HMAC_SECRET = process.env.JWT_SECRET || 'dev-secret-key-for-testing-only'
@@ -57,10 +58,11 @@ export class MockAuthProvider implements AuthProvider {
 
     // Query ข้อมูลพนักงานจาก HR view
     const sql = `
-      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME
+      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME, EMP_TYPE
       FROM fss.V_PN_EMP_OTH
       WHERE PRV_CIZ_ID = :national_id
         AND EMP_STATUS != 4
+      ORDER BY EMP_TYPE
     `
 
     const employees = await executeQuery<HrEmployee>(sql, { national_id: nationalId })
@@ -69,7 +71,7 @@ export class MockAuthProvider implements AuthProvider {
       throw new Error('NOT_FOUND')
     }
 
-    const emp = employees[0]
+    const emp = selectHrEmployee(employees)
 
     return {
       emp_id: emp.EMP_CODE,
@@ -173,10 +175,11 @@ export class ThaIDAuthProvider implements AuthProvider {
     }
 
     const sql = `
-      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME
+      SELECT PRV_CIZ_ID, EMP_CODE, EMP_NAME, DEPT_PAID_CODE, DEPT_PAID_NAME, EMP_TYPE
       FROM fss.V_PN_EMP_OTH
       WHERE PRV_CIZ_ID = :national_id
         AND EMP_STATUS != 4
+      ORDER BY EMP_TYPE
     `
 
     const employees = await executeQuery<HrEmployee>(sql, { national_id: nationalId })
@@ -185,7 +188,7 @@ export class ThaIDAuthProvider implements AuthProvider {
       throw new Error('NOT_FOUND')
     }
 
-    const emp = employees[0]
+    const emp = selectHrEmployee(employees)
     return {
       emp_id: emp.EMP_CODE,
       national_id: emp.PRV_CIZ_ID,
