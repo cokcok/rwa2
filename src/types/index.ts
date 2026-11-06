@@ -88,6 +88,15 @@ export interface HrEmployee {
   EMP_NAME: string
   DEPT_PAID_CODE: string
   DEPT_PAID_NAME: string
+  EMP_TYPE?: string
+}
+
+// เลือกข้อมูลพนักงานจากผล query (มีปัญหากรณีเลขบัตรซ้ำหลาย row)
+// กติกา: 1 row -> ใช้ row เดียว | >1 row -> เอาตัวที่ EMP_TYPE = '1' (พนักงาน) ตัวแรก
+//         ถ้าไม่มีตัวไหน EMP_TYPE = '1' -> fallback ตัวแรก
+export function selectHrEmployee(employees: HrEmployee[]): HrEmployee {
+  if (employees.length === 1) return employees[0]
+  return employees.find(e => String(e.EMP_TYPE) === '1') ?? employees[0]
 }
 
 // ข้อมูลจาก Oracle GIS View
